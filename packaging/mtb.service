@@ -1,0 +1,30 @@
+[Unit]
+Description=mtb: MikroTik config and certificate backup
+Documentation=https://github.com/netcorexc0a8/mtb/blob/main/README.ru.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mtb
+Group=mtb
+WorkingDirectory=/var/lib/mtb
+Environment=BACKUP_DIR=/var/lib/mtb/backups
+Environment=DATA_DIR=/var/lib/mtb/data
+Environment=WEB_LISTEN=0.0.0.0:8080
+# Необязательные переопределения (WEB_LISTEN, WEB_TLS_*, WEB_COOKIE_SECURE, LOG_LEVEL)
+EnvironmentFile=-/etc/mtb/mtb.env
+ExecStart=/usr/local/bin/mtb serve
+Restart=on-failure
+RestartSec=30
+
+# Ограничения
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/mtb
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

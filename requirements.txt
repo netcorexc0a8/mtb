@@ -1,0 +1,7 @@
+librouteros==4.2.2
+paramiko>=3.4,<6
+PyYAML>=6.0
+APScheduler>=3.10,<4
+requests>=2.31
+tzdata
+python-dotenv>=1.0

@@ -1,0 +1,122 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  binary-linux:
+    name: binary linux-${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-24.04,     arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    # Debian 10 (glibc 2.28): бинарник запустится на Debian 10+, Astra 1.7+, RHEL 8+
+    container: python:3.11-slim-buster
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tools
+        run: |
+          sed -i 's|deb.debian.org|archive.debian.org|g; /security/d' /etc/apt/sources.list
+          apt-get update && apt-get install -y --no-install-recommends binutils
+
+      - name: Set version
+        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > mtb/_version.py
+
+      - name: Build
+        run: |
+          pip install --no-cache-dir -r requirements.txt pyinstaller
+          pyinstaller --clean --noconfirm mtb.spec
+          mv dist/mtb dist/mtb-linux-${{ matrix.arch }}
+          ./dist/mtb-linux-${{ matrix.arch }} --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtb-linux-${{ matrix.arch }}
+          path: dist/mtb-linux-${{ matrix.arch }}
+
+  binary-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set version
+        shell: bash
+        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > mtb/_version.py
+
+      - name: Build
+        shell: bash
+        run: |
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --clean --noconfirm mtb.spec
+          mv dist/mtb.exe dist/mtb-windows-amd64.exe
+          ./dist/mtb-windows-amd64.exe --version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtb-windows-amd64
+          path: dist/mtb-windows-amd64.exe
+
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [binary-linux, binary-windows, docker]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Assets
+        run: |
+          cp install.sh packaging/mtb.service dist/
+          cp mtb.env.example dist/mtb.env.example
+          cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

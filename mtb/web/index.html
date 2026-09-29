@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mtb</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <!-- ============================== вход -->
+  <div class="auth-wrap hidden" id="auth">
+    <form class="card auth-card" id="auth-form" autocomplete="on">
+      <div class="brand brand-lg">
+        <svg class="i i-lg accent" viewBox="0 0 24 24"><path d="M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11zM6 16h.01M10 16h.01"/></svg>
+        <span>mtb</span>
+      </div>
+      <p class="muted small" id="auth-hint"></p>
+      <label id="f-user-wrap">Логин <input class="input" name="username" id="auth-user" autocomplete="username" required></label>
+      <label id="f-pass-wrap">Пароль <input class="input" type="password" name="password" id="auth-pass" autocomplete="current-password"></label>
+      <label id="f-current-wrap" class="hidden">Текущий (временный) пароль <input class="input" type="password" id="auth-current" autocomplete="current-password"></label>
+      <label id="f-new-wrap" class="hidden">Новый пароль <input class="input" type="password" id="auth-new" autocomplete="new-password" minlength="10"></label>
+      <label id="f-confirm-wrap" class="hidden">Подтверждение пароля <input class="input" type="password" id="auth-confirm" autocomplete="new-password"></label>
+      <ul class="pw-rules hidden" id="pw-rules">
+        <li data-rule="len">не короче 10 символов</li>
+        <li data-rule="match">пароли совпадают</li>
+        <li data-rule="user">не совпадает с логином</li>
+      </ul>
+      <div class="alert alert-error hidden" id="auth-error"></div>
+      <button class="btn btn-primary btn-block" id="auth-submit">Войти</button>
+      <button type="button" class="link hidden" id="auth-back">← Другой пользователь</button>
+    </form>
+  </div>
+
+  <!-- ============================== приложение -->
+  <div class="hidden" id="shell">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="i i-lg accent" viewBox="0 0 24 24"><path d="M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11zM6 16h.01M10 16h.01"/></svg>
+        <span>mtb</span>
+        <span class="muted small" id="version"></span>
+      </div>
+      <nav class="nav" id="nav">
+        <a href="#/backups" data-page="backups">Бэкапы</a>
+        <a href="#/devices" data-page="devices">Устройства</a>
+        <a href="#/runs" data-page="runs">Журнал</a>
+        <a href="#/settings" data-page="settings" class="admin-only">Настройки</a>
+        <a href="#/users" data-page="users" class="admin-only">Пользователи</a>
+        <a href="#/audit" data-page="audit" class="admin-only">Аудит</a>
+      </nav>
+      <div class="topbar-right">
+        <button class="icon-btn" id="theme-btn" title="Сменить тему">
+          <svg class="i" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+        </button>
+        <div class="menu">
+          <button class="btn btn-sm" id="user-btn"></button>
+          <div class="menu-list hidden" id="user-menu">
+            <button data-act="change-password">Сменить пароль</button>
+            <button data-act="logout">Выйти</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div id="banners"></div>
+      <div class="toast hidden" id="toast"></div>
+
+      <!-- ---------- бэкапы -->
+      <section class="view" id="page-backups">
+        <div class="page-head">
+          <h1>Бэкапы <span class="muted count" id="total"></span></h1>
+          <button class="btn btn-primary admin-only" id="create-open">
+            <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Создать бэкап
+          </button>
+        </div>
+        <section class="card card-accent hidden" id="create-card">
+          <h3>Новый бэкап</h3>
+          <div class="grid2">
+            <label>Устройство
+              <select class="input" id="create-device"></select>
+            </label>
+            <label>Заметка (необязательно)
+              <input class="input" id="create-notes" maxlength="500" placeholder="Перед обновлением…">
+            </label>
+          </div>
+          <div class="alert alert-error hidden" id="create-error"></div>
+          <div class="row gap">
+            <button class="btn" id="create-cancel">Отмена</button>
+            <button class="btn btn-primary" id="create-submit" disabled><span>Создать бэкап</span></button>
+          </div>
+        </section>
+        <section class="card filters">
+          <label class="grow">Поиск
+            <span class="input-icon">
+              <svg class="i i-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input class="input" id="f-search" placeholder="Устройство, файл или заметка…">
+            </span>
+          </label>
+          <label>Устройство <select class="input" id="f-device"></select></label>
+          <label>Тип <select class="input" id="f-type"></select></label>
+          <label>С <input type="date" class="input" id="f-from"></label>
+          <label>По <input type="date" class="input" id="f-to"></label>
+          <button class="btn btn-sm hidden" id="f-clear">Сбросить</button>
+        </section>
+        <section class="card selbar hidden" id="selbar">
+          <strong id="sel-count"></strong>
+          <button class="link" id="sel-clear">Снять выделение</button>
+          <span class="muted small hidden" id="sel-hint"></span>
+          <div class="row gap push">
+            <button class="btn btn-sm" id="sel-compare">Сравнить</button>
+            <button class="btn btn-sm btn-danger hidden" id="sel-delete"><span>Удалить</span></button>
+          </div>
+        </section>
+        <section id="list"></section>
+      </section>
+
+      <section class="view" id="page-devices"></section>
+      <section class="view" id="page-runs"></section>
+      <section class="view" id="page-settings"></section>
+      <section class="view" id="page-users"></section>
+      <section class="view" id="page-audit"></section>
+    </main>
+  </div>
+
+  <div class="modal-back hidden" id="modal">
+    <div class="modal card" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div class="modal-title" id="modal-title"></div>
+        <div class="row gap-sm" id="modal-actions"></div>
+        <button class="icon-btn" id="modal-close" title="Закрыть (Esc)">
+          <svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</body>
+</html>

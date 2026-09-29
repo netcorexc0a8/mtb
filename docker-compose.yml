@@ -1,0 +1,19 @@
+services:
+  mtb:
+    image: ghcr.io/netcorexc0a8/mtb:latest
+    # Для сборки из исходников вместо готового образа:
+    # build: .
+    container_name: mtb
+    restart: unless-stopped
+    init: true
+    # uid:gid владельца папок ./data и ./backups на хосте (id -u / id -g)
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      TZ: Europe/Moscow                 # только для логов; часовой пояс расписания — в настройках
+      # WEB_COOKIE_SECURE: "true"       # если интерфейс открыт через HTTPS-прокси
+    # Лучше публиковать на localhost и выставлять наружу через прокси с TLS
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data           # SQLite, ключ шифрования, known_hosts — бэкапьте вместе
+      - ./backups:/backups     # бэкапы
