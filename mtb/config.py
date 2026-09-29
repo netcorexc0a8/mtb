@@ -64,17 +64,8 @@ def load_bootstrap(data_dir: str | None = None) -> Bootstrap:
     )
 
 
-LEGACY_DB_NAME = "mt" + "-backup.db"          # имя базы до переименования проекта в mtb
-
-
 def open_storage(boot: Bootstrap) -> tuple[Database, SecretBox]:
     boot.data_dir.mkdir(parents=True, exist_ok=True)
-    legacy = boot.data_dir / LEGACY_DB_NAME
-    if legacy.exists() and not boot.db_path.exists():
-        for suffix in ("", "-wal", "-shm"):
-            src = Path(str(legacy) + suffix)
-            if src.exists():
-                src.rename(str(boot.db_path) + suffix)
     return Database(boot.db_path), SecretBox(boot.data_dir / "secret.key")
 
 

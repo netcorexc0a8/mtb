@@ -7,7 +7,6 @@
   mtb check [-d NAME]        проверка доступа без экспорта
   mtb probe [-d NAME]        какой транспорт файлов работает (sftp / api / ssh)
   mtb fingerprint HOST[:PORT]
-  mtb import-config -c devices.yaml [-e .env] [--replace]
   mtb reset-password [USER]  пароль будет задан заново при следующем входе
 """
 from __future__ import annotations
@@ -133,13 +132,6 @@ def cmd_fingerprint(target: str) -> None:
     print(info["pem"], end="")
 
 
-def cmd_import(ctx: Context, cfg: str | None, replace: bool) -> None:
-    from .importer import import_legacy
-    for line in import_legacy(ctx.db, ctx.box, Path(cfg) if cfg else None, replace):
-        print(line)
-    ctx.db.audit("cli", "import_config", cfg or ".env")
-
-
 def cmd_reset_password(ctx: Context, username: str) -> None:
     from .auth import ensure_admin, reset_password
     ensure_admin(ctx.db)
@@ -183,10 +175,6 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--no-sftp", action="store_true", help="не использовать SFTP как эталон")
     f = sub.add_parser("fingerprint", help="показать отпечаток TLS-сертификата api-ssl")
     f.add_argument("target", metavar="HOST[:PORT]")
-    im = sub.add_parser("import-config", parents=[common],
-                        help="перенести devices.yaml и переменные старой версии в базу")
-    im.add_argument("-c", "--config", help="старый devices.yaml")
-    im.add_argument("--replace", action="store_true", help="перезаписать существующие устройства")
     rp = sub.add_parser("reset-password", parents=[common],
                         help="сбросить пароль: новый задаётся при следующем входе")
     rp.add_argument("username", nargs="?", default="admin")
@@ -222,8 +210,6 @@ def main() -> None:
             sys.exit(0 if cmd_check(ctx, only) else 1)
         elif cmd == "probe":
             sys.exit(0 if cmd_probe(ctx, only, not args.no_sftp) else 1)
-        elif cmd == "import-config":
-            cmd_import(ctx, args.config, args.replace)
         elif cmd == "reset-password":
             cmd_reset_password(ctx, args.username)
     except config.ConfigError as exc:

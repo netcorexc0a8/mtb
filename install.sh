@@ -71,6 +71,4 @@ cat <<MSG
 Дальше всё настраивается в интерфейсе: устройства, расписание, хранение, Gitea, Telegram.
   Логи:                 journalctl -u mtb -f
   Забыли пароль admin:  sudo -u mtb env DATA_DIR=$VAR/data mtb reset-password admin
-  Перенос старых настроек (devices.yaml + .env):
-    sudo -u mtb env DATA_DIR=$VAR/data mtb -e старый.env import-config -c devices.yaml
 MSG

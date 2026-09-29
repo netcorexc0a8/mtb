@@ -12,7 +12,7 @@ A service for daily backups of MikroTik RouterOS 7 devices, with a web interface
 
 Everything is configured in the browser: devices, schedule, storage, Gitea, Telegram and users. Settings live in SQLite, with device passwords and tokens encrypted. Backups are stored in a folder, either as current state with git history or as dated snapshots, and pushing to a self-hosted Gitea is optional.
 
-It ships as a single binary on GitHub Releases (Linux amd64/arm64, Windows) and as a Docker image. No Python, no external database and no CDN are needed, so it also works in air-gapped networks.
+It ships as a single binary on GitHub Releases (Linux amd64/arm64) and as a Docker image. No Python, no external database and no CDN are needed, so it also works in air-gapped networks.
 
 ![Devices](docs/en/web-devices.png)
 
@@ -45,7 +45,6 @@ It ships as a single binary on GitHub Releases (Linux amd64/arm64, Windows) and 
 - [Transport modes](#transport-modes)
 - [Storage and Gitea](#storage-and-gitea)
 - [Commands](#commands)
-- [Migrating from 1.x](#migrating-from-1x)
 - [Restore](#restore)
 - [Security](#security)
 - [Backing up mtb itself](#backing-up-mtb-itself)
@@ -169,7 +168,7 @@ The binary is self-contained and runs on glibc 2.28 or newer: Debian 10+, Ubuntu
 ```bash
 curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh | sudo sh
 # a specific version:
-curl -fsSLO https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh && sudo sh install.sh v2.0.0
+curl -fsSLO https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh && sudo sh install.sh v0.1.0
 ```
 
 What the script does:
@@ -188,13 +187,6 @@ chmod +x mtb && ./mtb
 ```
 
 The database and backups are created in `./data` and `./backups`.
-
-### Windows
-
-1. Download `mtb-windows-amd64.exe` from [Releases](https://github.com/netcorexc0a8/mtb/releases) and put it in `C:\mtb\`.
-2. For git storage, install [Git for Windows](https://git-scm.com/download/win), or choose snapshots storage in the settings.
-3. Run `mtb-windows-amd64.exe serve` from `C:\mtb` and open `http://localhost:8080`.
-4. To keep it running, set it up as a service, for example with NSSM, using `C:\mtb` as the working directory.
 
 ### Docker Compose
 
@@ -357,8 +349,6 @@ mtb [--data-dir DIR] [-e ENV_FILE] [--log-level LEVEL] [COMMAND]
   probe [-d NAME ...] [--no-sftp]
                           test which file transport works
   fingerprint HOST[:PORT] fingerprint, expiry and PEM of the API-SSL certificate
-  import-config -c devices.yaml [--replace]
-                          migrate a 1.x configuration
   reset-password [USER]   reset a password (admin by default)
   -V, --version
 ```
@@ -370,26 +360,6 @@ sudo -u mtb env DATA_DIR=/var/lib/mtb/data mtb check
 ```
 
 In Docker: `docker compose exec mtb mtb check`.
-
-## Migrating from 1.x
-
-Version 1.x was configured with `devices.yaml` and `.env`. To import them into the database:
-
-```bash
-# binary / systemd
-sudo -u mtb env DATA_DIR=/var/lib/mtb/data \
-  mtb -e /old/.env import-config -c /old/config/devices.yaml
-
-# Docker: put the old files into ./data/old/ and run
-docker compose exec mtb mtb -e /data/old/.env import-config -c /data/old/devices.yaml
-```
-
-What gets imported:
-
-- **Devices.** Passwords come from `MT_PASSWORD` and `password_env`, and `tls_ca` is read as the contents of the PEM file.
-- **General settings** from the variables (`SCHEDULE`, `BACKUP_PASSPHRASE`, `STORAGE`, `GITEA_*`, `TELEGRAM_*`, and so on).
-
-Existing devices are skipped unless you pass `--replace`. The backup folder stays as is: git history and snapshots are picked up unchanged. The old `WEB_USER` and `WEB_PASSWORD` are no longer used — log in as `admin` and set a password.
 
 ## Restore
 
@@ -482,7 +452,7 @@ pip install pyinstaller && pyinstaller --clean --noconfirm mtb.spec
 
 For compatibility with older glibc, build inside `python:3.11-slim-buster`, as CI does.
 
-**Release:** `git tag v2.0.0 && git push origin v2.0.0`. The workflow builds the binaries (linux-amd64, linux-arm64, windows-amd64), publishes the image to GHCR, and creates a GitHub Release with `install.sh`, the systemd unit and `SHA256SUMS`.
+**Release:** `git tag v0.1.0 && git push origin v0.1.0`. The workflow builds the binaries (linux-amd64, linux-arm64), publishes the image to GHCR, and creates a GitHub Release with `install.sh`, the systemd unit and `SHA256SUMS`.
 
 ### Project layout
 
@@ -502,7 +472,6 @@ mtb/
 │   ├── probe.py         # transport checks
 │   ├── storage.py       # git / snapshots storage, Gitea push
 │   ├── catalog.py       # backup index for the web UI
-│   ├── importer.py      # migrating 1.x devices.yaml and .env
 │   └── notify.py        # Telegram
 ├── packaging/           # PyInstaller entry point, systemd unit
 ├── docs/                # screenshots

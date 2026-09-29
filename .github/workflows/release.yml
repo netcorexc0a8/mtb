@@ -43,31 +43,6 @@ jobs:
           name: mtb-linux-${{ matrix.arch }}
           path: dist/mtb-linux-${{ matrix.arch }}
 
-  binary-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set version
-        shell: bash
-        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > mtb/_version.py
-
-      - name: Build
-        shell: bash
-        run: |
-          pip install -r requirements.txt pyinstaller
-          pyinstaller --clean --noconfirm mtb.spec
-          mv dist/mtb.exe dist/mtb-windows-amd64.exe
-          ./dist/mtb-windows-amd64.exe --version
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mtb-windows-amd64
-          path: dist/mtb-windows-amd64.exe
-
   docker:
     runs-on: ubuntu-24.04
     env:
@@ -108,7 +83,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [binary-linux, binary-windows, docker]
+    needs: [binary-linux, docker]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

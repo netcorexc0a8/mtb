@@ -161,7 +161,7 @@ const EN = {
   'устройство удалено': 'device deleted', 'пользователь создан': 'user created', 'смена роли': 'role change',
   'пользователь удалён': 'user deleted', 'ручной бэкап': 'manual backup', 'бэкап удалён': 'backup deleted',
   'удаление бэкапов': 'bulk delete', 'восстановление': 'restore', 'скачивание': 'download', 'запуск всех': 'run all',
-  'импорт конфигурации': 'config import', 'последние 300 событий': 'last 300 events',
+'последние 300 событий': 'last 300 events',
   'Время': 'Time', 'Действие': 'Action', 'Подробности': 'Details',
 };
 
@@ -222,7 +222,7 @@ const THEME_TITLE = { auto: 'Тема: как в системе', light: 'Тем
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 function themeMode() {
-  const m = readPref('mtb-theme') || readPref('mtbk-theme');   // mtbk-theme — ключ прежних версий
+  const m = readPref('mtb-theme');
   return THEMES.includes(m) ? m : 'auto';
 }
 

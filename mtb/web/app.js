@@ -975,7 +975,7 @@ const AUDIT_LABEL = {
   device_delete: t('устройство удалено'), user_create: t('пользователь создан'), user_role: t('смена роли'),
   user_reset_password: t('временный пароль'), user_delete: t('пользователь удалён'), backup_manual: t('ручной бэкап'),
   backup_delete: t('бэкап удалён'), backup_bulk_delete: t('удаление бэкапов'), backup_restore: t('восстановление'),
-  backup_download: t('скачивание'), run_all: t('запуск всех'), import_config: t('импорт конфигурации'),
+  backup_download: t('скачивание'), run_all: t('запуск всех'),
 };
 
 async function loadAudit() {

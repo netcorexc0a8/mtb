@@ -10,7 +10,7 @@
 
 Вся настройка идёт в браузере: устройства, расписание, хранение, Gitea, Telegram и пользователи. Настройки лежат в SQLite, пароли устройств и токены в базе зашифрованы. Бэкапы складываются в папку с историей изменений (git) или снимками по датам, push в self-hosted Gitea — по желанию.
 
-Устанавливается одним бинарником из GitHub Releases (Linux amd64/arm64, Windows) или через Docker / Docker Compose. Python, база данных и CDN не нужны: работает и в закрытом контуре.
+Устанавливается одним бинарником из GitHub Releases (Linux amd64/arm64) или через Docker / Docker Compose. Python, база данных и CDN не нужны: работает и в закрытом контуре.
 
 ![Бэкапы](docs/web-backups.png)
 
@@ -43,7 +43,6 @@
 - [Режимы транспорта](#режимы-транспорта)
 - [Хранение и Gitea](#хранение-и-gitea)
 - [Команды](#команды)
-- [Переход со старой версии](#переход-со-старой-версии)
 - [Восстановление](#восстановление)
 - [Безопасность](#безопасность)
 - [Резервная копия самого mtb](#резервная-копия-самого-mtb)
@@ -167,7 +166,7 @@ backups/
 ```bash
 curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh | sudo sh
 # конкретная версия:
-curl -fsSLO https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh && sudo sh install.sh v2.0.0
+curl -fsSLO https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh && sudo sh install.sh v0.1.0
 ```
 
 Что делает скрипт:
@@ -186,13 +185,6 @@ chmod +x mtb && ./mtb
 ```
 
 База и бэкапы создадутся в `./data` и `./backups`.
-
-### Windows
-
-1. Скачайте `mtb-windows-amd64.exe` из [Releases](https://github.com/netcorexc0a8/mtb/releases) и положите в `C:\mtb\`.
-2. Для хранения git установите [Git for Windows](https://git-scm.com/download/win) или выберите в настройках хранение снимками.
-3. Запустите `mtb-windows-amd64.exe serve` из `C:\mtb` и откройте `http://localhost:8080`.
-4. Для постоянной работы оформите запуск как службу, например через NSSM, с рабочей папкой `C:\mtb`.
 
 ### Docker Compose
 
@@ -355,8 +347,6 @@ mtb [--data-dir DIR] [-e ENV_FILE] [--log-level LEVEL] [КОМАНДА]
   probe [-d NAME ...] [--no-sftp]
                           какой транспорт файлов работает
   fingerprint HOST[:PORT] отпечаток, срок и PEM сертификата API-SSL
-  import-config -c devices.yaml [--replace]
-                          перенос конфигурации старой версии
   reset-password [USER]   сбросить пароль (по умолчанию admin)
   -V, --version
 ```
@@ -368,26 +358,6 @@ sudo -u mtb env DATA_DIR=/var/lib/mtb/data mtb check
 ```
 
 В Docker: `docker compose exec mtb mtb check`.
-
-## Переход со старой версии
-
-Версии 1.x настраивались через `devices.yaml` и `.env`. Чтобы перенести их в базу:
-
-```bash
-# бинарник / systemd
-sudo -u mtb env DATA_DIR=/var/lib/mtb/data \
-  mtb -e /старый/.env import-config -c /старый/config/devices.yaml
-
-# Docker: положите старые файлы в ./data/old/ и выполните
-docker compose exec mtb mtb -e /data/old/.env import-config -c /data/old/devices.yaml
-```
-
-Что переносится:
-
-- **Устройства.** Пароли берутся из `MT_PASSWORD` и `password_env`, а `tls_ca` — содержимым PEM-файла.
-- **Общие настройки** из переменных (`SCHEDULE`, `BACKUP_PASSPHRASE`, `STORAGE`, `GITEA_*`, `TELEGRAM_*` и т. д.).
-
-Уже существующие устройства пропускаются, `--replace` их перезаписывает. Папку бэкапов менять не нужно: история git и снимки подхватятся как есть. Старые `WEB_USER` и `WEB_PASSWORD` больше не используются — войдите как `admin` и задайте пароль.
 
 ## Восстановление
 
@@ -480,7 +450,7 @@ pip install pyinstaller && pyinstaller --clean --noconfirm mtb.spec
 
 Для совместимости со старыми glibc собирайте в `python:3.11-slim-buster`, как CI.
 
-**Релиз:** `git tag v2.0.0 && git push origin v2.0.0`. Workflow соберёт бинарники (linux-amd64, linux-arm64, windows-amd64), опубликует образ в GHCR и создаст GitHub Release с `install.sh`, systemd-юнитом и `SHA256SUMS`.
+**Релиз:** `git tag v0.1.0 && git push origin v0.1.0`. Workflow соберёт бинарники (linux-amd64, linux-arm64), опубликует образ в GHCR и создаст GitHub Release с `install.sh`, systemd-юнитом и `SHA256SUMS`.
 
 ### Структура проекта
 
@@ -500,7 +470,6 @@ mtb/
 │   ├── probe.py         # проверка транспортов
 │   ├── storage.py       # хранение git / снимки, push в Gitea
 │   ├── catalog.py       # индекс бэкапов для веба
-│   ├── importer.py      # перенос devices.yaml и .env старой версии
 │   └── notify.py        # Telegram
 ├── packaging/           # точка входа PyInstaller, systemd-юнит
 ├── docs/                # скриншоты
