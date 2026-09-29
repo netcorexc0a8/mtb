@@ -465,7 +465,7 @@ For a detailed log, use `LOG_LEVEL=DEBUG`.
 ```bash
 git clone https://github.com/netcorexc0a8/mtb.git && cd mtb
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-python -m MTB serve          # http://localhost:8080, data in ./data and ./backups
+python -m mtb serve          # http://localhost:8080, data in ./data and ./backups
 ```
 
 **Binary:**
@@ -482,7 +482,7 @@ For compatibility with older glibc, build inside `python:3.11-slim-buster`, as C
 
 ```
 mtb/
-├── MTB/
+├── mtb/
 │   ├── main.py          # CLI and service (schedule + web)
 │   ├── config.py        # startup from environment; settings and devices from SQLite
 │   ├── db.py            # SQLite: schema and migrations

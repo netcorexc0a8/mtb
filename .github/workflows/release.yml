@@ -113,7 +113,7 @@ jobs:
       - name: Assets
         run: |
           cp install.sh packaging/mtb.service dist/
-          cp mtb.env.example dist/mtb.env.example
+          cp .env.example dist/mtb.env.example
           cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
 
       - uses: softprops/action-gh-release@v2

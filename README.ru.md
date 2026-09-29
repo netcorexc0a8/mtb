@@ -461,7 +461,7 @@ docker compose exec mtb mtb -e /data/old/.env import-config -c /data/old/devices
 ```bash
 git clone https://github.com/netcorexc0a8/mtb.git && cd mtb
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-python -m MTB serve          # http://localhost:8080, данные в ./data и ./backups
+python -m mtb serve          # http://localhost:8080, данные в ./data и ./backups
 ```
 
 **Бинарник:**
@@ -478,7 +478,7 @@ pip install pyinstaller && pyinstaller --clean --noconfirm mtb.spec
 
 ```
 mtb/
-├── MTB/
+├── mtb/
 │   ├── main.py          # CLI и сервис (расписание + веб)
 │   ├── config.py        # запуск из окружения, настройки и устройства из SQLite
 │   ├── db.py            # SQLite: схема и миграции
