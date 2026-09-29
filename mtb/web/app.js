@@ -3,9 +3,9 @@
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const TYPE_LABEL = { scheduled: 'По расписанию', manual: 'Ручной', current: 'Текущий' };
-const MODE_LABEL = { snapshot: 'снимки', git: 'git-история', plain: 'только текущее' };
-const TRANSPORT_LABEL = { sftp: 'API + SFTP', api: 'только API', ssh: 'только SSH' };
+const TYPE_LABEL = { scheduled: t('По расписанию'), manual: t('Ручной'), current: t('Текущий') };
+const MODE_LABEL = { snapshot: t('снимки'), git: t('git-история'), plain: t('только текущее') };
+const TRANSPORT_LABEL = { sftp: 'API + SFTP', api: t('только API'), ssh: t('только SSH') };
 const ICON = {
   file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 13H8M16 17H8M16 13h-2"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
@@ -33,13 +33,14 @@ class HttpError extends Error { constructor(msg, status) { super(msg); this.stat
 
 async function api(path, { method = 'GET', body } = {}) {
   const headers = { Accept: 'application/json' };
+  headers['X-Lang'] = LANG;
   if (method !== 'GET') headers['X-Requested-With'] = 'mtb';
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, { method, headers, credentials: 'same-origin',
     body: body === undefined ? undefined : JSON.stringify(body) });
   let data = null;
   try { data = await res.json(); } catch { /* пустой ответ */ }
-  if (res.status === 401 && !path.startsWith('/api/auth/')) { showAuth(); throw new HttpError('Требуется вход', 401); }
+  if (res.status === 401 && !path.startsWith('/api/auth/')) { showAuth(); throw new HttpError(t('Требуется вход'), 401); }
   if (!res.ok) throw new HttpError((data && data.error) || `HTTP ${res.status}`, res.status);
   return data;
 }
@@ -49,11 +50,12 @@ async function api(path, { method = 'GET', body } = {}) {
 const fmtDate = (v, withYear = true) => {
   if (v === null || v === undefined) return '—';
   const d = typeof v === 'number' ? new Date(v * 1000) : new Date(v);
-  return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}),
+  return d.toLocaleString(LOCALE, { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}),
     hour: '2-digit', minute: '2-digit', ...(state.me?.timezone ? { timeZone: state.me.timezone } : {}) });
 };
-const fmtBytes = (n) => !n ? '—' : n >= 1048576 ? `${(n / 1048576).toFixed(1)} МБ` : n >= 1024 ? `${(n / 1024).toFixed(1)} КБ` : `${n} Б`;
+const fmtBytes = (n) => !n ? '—' : n >= 1048576 ? `${(n / 1048576).toFixed(1)} ${t("МБ")}` : n >= 1024 ? `${(n / 1024).toFixed(1)} ${t("КБ")}` : `${n} ${t("Б")}`;
 const plural = (n, one, few, many) => {
+  if (LANG === 'en') return n === 1 ? one : many;
   const m10 = n % 10, m100 = n % 100;
   return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? few : many;
 };
@@ -99,7 +101,7 @@ function openModal({ title, actions = '', body, narrow = false, wide = false }) 
   state.modalHandler = null;
 }
 function closeModal() { $('modal').classList.add('hidden'); $('modal-body').innerHTML = ''; state.modalHandler = null; }
-const loadingBody = `<div class="loading">${icon('loader', 'spin')} Загрузка…</div>`;
+const loadingBody = `<div class="loading">${icon('loader', 'spin')} ${t("Загрузка…")}</div>`;
 const errorBody = (msg) => `<div class="alert alert-error">${esc(msg)}</div>`;
 
 /* ================================================================== вход */
@@ -126,12 +128,12 @@ function setAuthMode(mode, username = '', needCurrent = false, firstRun = false)
   $('auth-back').classList.toggle('hidden', !setup || firstRun);
   $('auth-user').readOnly = setup;
   if (username) $('auth-user').value = username;
-  $('auth-submit').textContent = setup ? 'Сохранить пароль и войти' : 'Войти';
+  $('auth-submit').textContent = setup ? t('Сохранить пароль и войти') : t('Войти');
   $('auth-error').classList.add('hidden');
   $('auth-hint').textContent = !setup ? '' : firstRun
-    ? 'Первый запуск. Придумайте пароль администратора — он понадобится для входа.'
-    : needCurrent ? 'Администратор выдал временный пароль. Введите его и придумайте свой.'
-      : 'Пароль ещё не задан. Придумайте пароль для входа.';
+    ? t('Первый запуск. Придумайте пароль администратора — он понадобится для входа.')
+    : needCurrent ? t('Администратор выдал временный пароль. Введите его и придумайте свой.')
+      : t('Пароль ещё не задан. Придумайте пароль для входа.');
   for (const id of ['auth-pass', 'auth-current', 'auth-new', 'auth-confirm']) $(id).value = '';
   updateRules();
   (setup ? (needCurrent ? $('auth-current') : $('auth-new')) : ($('auth-user').value ? $('auth-pass') : $('auth-user'))).focus();
@@ -153,12 +155,12 @@ async function submitAuth(e) {
   const btn = $('auth-submit');
   try {
     if (authState.mode === 'login') {
-      const r = await withBusy(btn, 'Вход…', () => api('/api/auth/login', { method: 'POST',
+      const r = await withBusy(btn, t('Вход…'), () => api('/api/auth/login', { method: 'POST',
         body: { username: $('auth-user').value.trim(), password: $('auth-pass').value } }));
       if (r.setup) return setAuthMode('setup', r.username, r.need_current);
     } else {
-      if (!updateRules()) throw new Error('Пароль не соответствует требованиям');
-      await withBusy(btn, 'Сохранение…', () => api('/api/auth/setup', { method: 'POST', body: {
+      if (!updateRules()) throw new Error(t('Пароль не соответствует требованиям'));
+      await withBusy(btn, t('Сохранение…'), () => api('/api/auth/setup', { method: 'POST', body: {
         username: authState.username, current: $('auth-current').value,
         password: $('auth-new').value, confirm: $('auth-confirm').value } }));
     }
@@ -172,21 +174,21 @@ async function logout() {
 }
 
 function changePassword() {
-  openModal({ title: '<h3>Смена пароля</h3>', narrow: true, body: `
+  openModal({ title: `<h3>${t("Смена пароля")}</h3>`, narrow: true, body: `
     <form class="stack" id="pw-form">
-      <label>Текущий пароль <input class="input" type="password" name="current" autocomplete="current-password" required></label>
-      <label>Новый пароль <input class="input" type="password" name="password" autocomplete="new-password" minlength="10" required></label>
-      <label>Подтверждение <input class="input" type="password" name="confirm" autocomplete="new-password" required></label>
-      <p class="hint">Не короче 10 символов. Остальные сессии будут завершены.</p>
+      <label>${t("Текущий пароль")} <input class="input" type="password" name="current" autocomplete="current-password" required></label>
+      <label>${t("Новый пароль")} <input class="input" type="password" name="password" autocomplete="new-password" minlength="10" required></label>
+      <label>${t("Подтверждение")} <input class="input" type="password" name="confirm" autocomplete="new-password" required></label>
+      <p class="hint">${t("Не короче 10 символов. Остальные сессии будут завершены.")}</p>
       <div class="alert alert-error hidden" id="pw-error"></div>
-      <div class="row gap dialog-actions"><button type="button" class="btn" data-act="modal-close">Отмена</button>
-      <button class="btn btn-primary">Сохранить</button></div>
+      <div class="row gap dialog-actions"><button type="button" class="btn" data-act="modal-close">${t("Отмена")}</button>
+      <button class="btn btn-primary">${t("Сохранить")}</button></div>
     </form>` });
   $('pw-form').onsubmit = async (e) => {
     e.preventDefault();
     try {
       await api('/api/me/password', { method: 'POST', body: formValues(e.target) });
-      closeModal(); toast('Пароль изменён');
+      closeModal(); toast(t('Пароль изменён'));
     } catch (ex) { $('pw-error').textContent = ex.message; $('pw-error').classList.remove('hidden'); }
   };
 }
@@ -199,7 +201,7 @@ async function start() {
   $('auth').classList.add('hidden'); $('shell').classList.remove('hidden');
   document.body.classList.toggle('is-admin', isAdmin());
   $('version').textContent = me.version;
-  $('user-btn').textContent = `${me.user}${isAdmin() ? '' : ' · просмотр'} ▾`;
+  $('user-btn').textContent = `${me.user}${isAdmin() ? '' : t(' · просмотр')} ▾`;
   renderBanners();
   route();
 }
@@ -207,10 +209,10 @@ async function start() {
 function renderBanners() {
   const me = state.me, out = [];
   if (!me.configured.length) out.push(isAdmin()
-    ? 'Устройств пока нет. <a href="#/devices">Добавьте первое устройство</a>.'
-    : 'Устройств пока нет — их добавляет администратор.');
-  if (isAdmin() && !me.passphrase_set) out.push('Не задан пароль шифрования бэкапов — без него .backup и сертификаты не создаются. <a href="#/settings">Настройки → Хранение</a>.');
-  $('banners').innerHTML = out.map((t) => `<div class="banner">${t}</div>`).join('');
+    ? `${t("Устройств пока нет.")} <a href="#/devices">${t("Добавьте первое устройство")}</a>.`
+    : t('Устройств пока нет — их добавляет администратор.'));
+  if (isAdmin() && !me.passphrase_set) out.push(`${t("Не задан пароль шифрования бэкапов — без него .backup и сертификаты не создаются.")} <a href="#/settings">${t("Настройки → Хранение")}</a>.`);
+  $('banners').innerHTML = out.map((msg) => `<div class="banner">${msg}</div>`).join('');
 }
 
 const PAGES = { backups: loadBackups, devices: loadDevices, runs: loadRuns, settings: loadSettings, users: loadUsers, audit: loadAudit };
@@ -230,9 +232,9 @@ function route() {
 
 async function loadBackups() {
   const me = state.me;
-  $('f-device').innerHTML = '<option value="">Все устройства</option>' +
+  $('f-device').innerHTML = `<option value="">${t("Все устройства")}</option>` +
     me.devices.map((d) => `<option value="${esc(d)}"${d === state.filters.device ? ' selected' : ''}>${esc(d)}</option>`).join('');
-  $('create-device').innerHTML = '<option value="">Выберите устройство…</option>' +
+  $('create-device').innerHTML = `<option value="">${t("Выберите устройство…")}</option>` +
     me.configured.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
   const q = new URLSearchParams(Object.entries(state.filters).filter(([, v]) => v));
   try {
@@ -246,8 +248,8 @@ async function loadBackups() {
 
 function renderBackups() {
   const typeSel = $('f-type'), cur = state.filters.type;
-  typeSel.innerHTML = '<option value="">Все типы</option>' + state.types.map((t) =>
-    `<option value="${esc(t.type)}"${t.type === cur ? ' selected' : ''}>${esc(TYPE_LABEL[t.type] || t.type)} (${t.count})</option>`).join('');
+  typeSel.innerHTML = `<option value="">${t("Все типы")}</option>` + state.types.map((ty) =>
+    `<option value="${esc(ty.type)}"${ty.type === cur ? ' selected' : ''}>${esc(TYPE_LABEL[ty.type] || ty.type)} (${ty.count})</option>`).join('');
   $('f-clear').classList.toggle('hidden', !Object.values(state.filters).some(Boolean));
   renderSelbar(); renderList();
 }
@@ -262,51 +264,51 @@ function comparePair() {
 function renderSelbar() {
   const n = state.selected.size;
   $('selbar').classList.toggle('hidden', n === 0);
-  $('sel-count').textContent = `Выбрано: ${n}`;
+  $('sel-count').textContent = `${t("Выбрано:")} ${n}`;
   const pair = comparePair();
   $('sel-compare').disabled = !pair;
-  $('sel-compare').title = pair ? 'Сравнить два выбранных бэкапа' : 'Выберите ровно два бэкапа';
+  $('sel-compare').title = pair ? t('Сравнить два выбранных бэкапа') : t('Выберите ровно два бэкапа');
   const chosen = state.backups.filter((b) => state.selected.has(b.id));
   const deletable = chosen.filter((b) => b.deletable).length, protectedN = chosen.length - deletable;
   $('sel-delete').classList.toggle('hidden', !(isAdmin() && deletable));
-  $('sel-delete').querySelector('span').textContent = `Удалить ${deletable}`;
+  $('sel-delete').querySelector('span').textContent = `${t("Удалить")} ${deletable}`;
   $('sel-hint').classList.toggle('hidden', !(isAdmin() && protectedN));
-  $('sel-hint').textContent = protectedN ? `${protectedN} ${plural(protectedN, 'бэкап', 'бэкапа', 'бэкапов')} из истории git удалить нельзя` : '';
+  $('sel-hint').textContent = protectedN ? `${protectedN} ${plural(protectedN, t('бэкап'), t('бэкапа'), t('бэкапов'))} ${t("из истории git удалить нельзя")}` : '';
 }
 
 function actionCell(b) {
   const c = state.confirm;
-  let html = `<button class="icon-btn" data-act="view" title="Просмотр">${icon('file', 'i-sm')}</button>`;
-  html += `<a class="icon-btn" href="/api/backups/${b.id}/download" title="Скачать" download>${icon('download', 'i-sm')}</a>`;
+  let html = `<button class="icon-btn" data-act="view" title="${t("Просмотр")}">${icon('file', 'i-sm')}</button>`;
+  html += `<a class="icon-btn" href="/api/backups/${b.id}/download" title="${t("Скачать")}" download>${icon('download', 'i-sm')}</a>`;
   if (isAdmin() && state.me.restore) {
     html += c && c.id === b.id && c.action === 'restore'
-      ? `<span class="confirm"><button class="yes warn" data-act="restore-yes">Восстановить?</button><button class="link" data-act="cancel">✕</button></span>`
-      : `<button class="icon-btn warn" data-act="restore" title="Восстановить (/import)">${icon('restore', 'i-sm')}</button>`;
+      ? `<span class="confirm"><button class="yes warn" data-act="restore-yes">${t("Восстановить?")}</button><button class="link" data-act="cancel">✕</button></span>`
+      : `<button class="icon-btn warn" data-act="restore" title="${t("Восстановить (/import)")}">${icon('restore', 'i-sm')}</button>`;
   }
   if (isAdmin() && b.deletable) {
     html += c && c.id === b.id && c.action === 'delete'
-      ? `<span class="confirm"><button class="yes" data-act="delete-yes">Удалить?</button><button class="link" data-act="cancel">✕</button></span>`
-      : `<button class="icon-btn danger" data-act="delete" title="Удалить">${icon('trash', 'i-sm')}</button>`;
+      ? `<span class="confirm"><button class="yes" data-act="delete-yes">${t("Удалить?")}</button><button class="link" data-act="cancel">✕</button></span>`
+      : `<button class="icon-btn danger" data-act="delete" title="${t("Удалить")}">${icon('trash', 'i-sm')}</button>`;
   }
   return `<div class="row gap-sm">${html}</div>`;
 }
 
 function renderList() {
   const list = $('list');
-  $('total').textContent = state.backups.length ? `(${state.backups.length} всего)` : '';
-  if (state.loading) { list.innerHTML = '<div class="card loading">Загрузка…</div>'; return; }
+  $('total').textContent = state.backups.length ? `(${state.backups.length} ${t("всего)")}` : '';
+  if (state.loading) { list.innerHTML = `<div class="card loading">${t("Загрузка…")}</div>`; return; }
   if (!state.backups.length) {
     const filtered = Object.values(state.filters).some(Boolean);
     list.innerHTML = `<div class="card empty">${icon('drive')}
-      <strong>${filtered ? 'Нет бэкапов, подходящих под фильтры' : 'Бэкапов пока нет'}</strong>
-      <span class="muted small">${filtered ? 'Расширьте диапазон дат или сбросьте фильтр.' : 'Они появятся после первого прогона по расписанию или ручного бэкапа.'}</span>
-      ${filtered ? '<button class="btn btn-sm" data-act="clear-filters">Сбросить фильтры</button>' : ''}</div>`;
+      <strong>${filtered ? t('Нет бэкапов, подходящих под фильтры') : t('Бэкапов пока нет')}</strong>
+      <span class="muted small">${filtered ? t('Расширьте диапазон дат или сбросьте фильтр.') : t('Они появятся после первого прогона по расписанию или ручного бэкапа.')}</span>
+      ${filtered ? `<button class="btn btn-sm" data-act="clear-filters">${t("Сбросить фильтры")}</button>` : ''}</div>`;
     return;
   }
   const allSel = state.backups.every((b) => state.selected.has(b.id));
   const rows = state.backups.map((b) => `
-    <tr data-id="${esc(b.id)}" class="${state.selected.has(b.id) ? 'sel' : ''}" title="Нажмите для просмотра">
-      <td class="chk" data-stop><input type="checkbox" data-act="toggle" ${state.selected.has(b.id) ? 'checked' : ''} aria-label="Выбрать"></td>
+    <tr data-id="${esc(b.id)}" class="${state.selected.has(b.id) ? 'sel' : ''}" title="${t("Нажмите для просмотра")}">
+      <td class="chk" data-stop><input type="checkbox" data-act="toggle" ${state.selected.has(b.id) ? 'checked' : ''} aria-label="${t("Выбрать")}"></td>
       <td class="dev">${esc(b.device)}</td>
       <td><span class="badge ${esc(b.type)}">${esc(TYPE_LABEL[b.type] || b.type)}</span></td>
       <td class="num">${fmtBytes(b.size)}</td>
@@ -315,8 +317,8 @@ function renderList() {
       <td data-stop>${actionCell(b)}</td>
     </tr>`).join('');
   list.innerHTML = `<div class="card table-wrap"><table>
-    <thead><tr><th class="chk"><input type="checkbox" data-act="toggle-all" ${allSel ? 'checked' : ''} aria-label="Выбрать все"></th>
-      <th>Устройство</th><th>Тип</th><th>Размер</th><th>Создан</th><th>Заметка</th><th class="col-actions">Действия</th></tr></thead>
+    <thead><tr><th class="chk"><input type="checkbox" data-act="toggle-all" ${allSel ? 'checked' : ''} aria-label="${t("Выбрать все")}"></th>
+      <th>${t("Устройство")}</th><th>${t("Тип")}</th><th>${t("Размер")}</th><th>${t("Создан")}</th><th>${t("Заметка")}</th><th class="col-actions">${t("Действия")}</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -378,7 +380,7 @@ function renderDiff(rows, full) {
   if (full) keep.fill(1);
   else rows.forEach((r, i) => { if (r.t !== 'ctx') for (let j = Math.max(0, i - CTX); j <= Math.min(rows.length - 1, i + CTX); j++) keep[j] = 1; });
   const out = []; let hidden = 0;
-  const flush = () => { if (hidden) { out.push(`<div class="gap" data-act="diff-full">⋯ ${hidden} ${plural(hidden, 'строка', 'строки', 'строк')} без изменений ⋯</div>`); hidden = 0; } };
+  const flush = () => { if (hidden) { out.push(`<div class="gap" data-act="diff-full">⋯ ${hidden} ${plural(hidden, t('строка'), t('строки'), t('строк'))} ${t("без изменений ⋯")}</div>`); hidden = 0; } };
   rows.forEach((r, i) => {
     if (!keep[i]) { hidden++; return; }
     flush();
@@ -389,81 +391,81 @@ function renderDiff(rows, full) {
 }
 
 async function viewBackup(id) {
-  openModal({ title: '<h3>Бэкап</h3>', body: loadingBody, wide: true });
+  openModal({ title: `<h3>${t("Бэкап")}</h3>`, body: loadingBody, wide: true });
   try {
     const d = await api(`/api/backups/${id}/content`);
     const other = d.files.filter((f) => f.path !== 'config.rsc');
     openModal({ wide: true,
       title: `<h3>${esc(d.device)}</h3><div class="small mono muted break">${esc(d.filename)}</div>
         <div class="small muted">${fmtDate(d.created_at)} · ${esc(TYPE_LABEL[d.type] || d.type)}${d.notes ? ' · ' + esc(d.notes) : ''}</div>`,
-      actions: `<a class="icon-btn" href="/api/backups/${d.id}/download" download title="Скачать config.rsc">${icon('download')}</a>`,
+      actions: `<a class="icon-btn" href="/api/backups/${d.id}/download" download title="${t("Скачать config.rsc")}">${icon('download')}</a>`,
       body: (other.length ? `<div class="files">${other.map((f) =>
         `<a class="file-chip" href="/api/backups/${d.id}/download?file=${encodeURIComponent(f.path)}" download>${icon('download', 'i-sm')}${esc(f.path)} <span class="muted">${fmtBytes(f.size)}</span></a>`).join('')}</div>` : '')
-        + (d.truncated ? '<div class="alert alert-error">Файл больше 2 МБ — показано начало.</div>' : '')
+        + (d.truncated ? `<div class="alert alert-error">${t("Файл больше 2 МБ — показано начало.")}</div>` : '')
         + `<pre class="code">${esc(d.content)}</pre>`,
     });
-  } catch (e) { openModal({ title: '<h3>Бэкап</h3>', body: errorBody(e.message) }); }
+  } catch (e) { openModal({ title: `<h3>${t("Бэкап")}</h3>`, body: errorBody(e.message) }); }
 }
 
 async function compareBackups([a, b]) {
-  openModal({ title: '<h3>Сравнение бэкапов</h3>', body: loadingBody, wide: true });
+  openModal({ title: `<h3>${t("Сравнение бэкапов")}</h3>`, body: loadingBody, wide: true });
   try {
     const d = await api(`/api/backups/${a}/diff/${b}`);
     const rows = diffLines(d.from.text, d.to.text);
     const added = rows.filter((r) => r.t === 'add').length, removed = rows.filter((r) => r.t === 'del').length;
     const draw = (full) => {
       openModal({ wide: true,
-        title: `<h3>Сравнение бэкапов</h3><div class="small mono muted break">${esc(d.from.filename)} → ${esc(d.to.filename)}</div>
+        title: `<h3>${t("Сравнение бэкапов")}</h3><div class="small mono muted break">${esc(d.from.filename)} → ${esc(d.to.filename)}</div>
           <div class="small"><span class="plus">+${added}</span> <span class="minus">−${removed}</span>
           <span class="muted"> · ${fmtDate(d.from.created_at, false)} → ${fmtDate(d.to.created_at, false)}</span></div>`,
-        actions: added + removed ? `<div class="seg"><button data-act="diff-changes" class="${full ? '' : 'on'}">Изменения</button><button data-act="diff-full" class="${full ? 'on' : ''}">Весь файл</button></div>` : '',
-        body: added + removed === 0 ? '<p class="muted identical">Эти два бэкапа идентичны.</p>' : renderDiff(rows, full),
+        actions: added + removed ? `<div class="seg"><button data-act="diff-changes" class="${full ? '' : 'on'}">${t("Изменения")}</button><button data-act="diff-full" class="${full ? 'on' : ''}">${t("Весь файл")}</button></div>` : '',
+        body: added + removed === 0 ? `<p class="muted identical">${t("Эти два бэкапа идентичны.")}</p>` : renderDiff(rows, full),
       });
       state.modalHandler = (act) => { if (act === 'diff-full') draw(true); if (act === 'diff-changes') draw(false); };
     };
     draw(false);
-  } catch (e) { openModal({ title: '<h3>Сравнение</h3>', body: errorBody(e.message) }); }
+  } catch (e) { openModal({ title: `<h3>${t("Сравнение")}</h3>`, body: errorBody(e.message) }); }
 }
 
 async function bulkDelete() {
   const ids = state.backups.filter((b) => state.selected.has(b.id) && b.deletable).map((b) => b.id);
-  openModal({ title: '<h3>Удаление бэкапов</h3>', body: loadingBody, narrow: true });
+  openModal({ title: `<h3>${t("Удаление бэкапов")}</h3>`, body: loadingBody, narrow: true });
   try {
     const p = await api('/api/backups/bulk-delete/preview', { method: 'POST', body: { ids } });
-    openModal({ title: '<h3>Удаление бэкапов</h3>', narrow: true,
-      body: `<p>Будет удалено <strong>${p.total}</strong> ${plural(p.total, 'бэкап', 'бэкапа', 'бэкапов')} вместе со всеми файлами снимка. Отменить нельзя.</p>
-        <table class="plain-table"><thead><tr><th>Устройство</th><th>Бэкапов</th></tr></thead><tbody class="static">
+    openModal({ title: `<h3>${t("Удаление бэкапов")}</h3>`, narrow: true,
+      body: `<p>${t("Будет удалено")} <strong>${p.total}</strong> ${plural(p.total, t('бэкап'), t('бэкапа'), t('бэкапов'))} ${t("вместе со всеми файлами снимка. Отменить нельзя.")}</p>
+        <table class="plain-table"><thead><tr><th>${t("Устройство")}</th><th>${t("Бэкапов")}</th></tr></thead><tbody class="static">
         ${p.devices.filter((r) => r.deletable).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.deletable}</td></tr>`).join('')}</tbody></table>
-        ${p.over_limit ? `<p class="alert alert-error">За раз — не больше ${p.limit}.</p>` : ''}
-        <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">Отмена</button>
-        <button class="btn btn-danger" data-act="bulk-yes" ${p.over_limit || !p.total ? 'disabled' : ''}>Удалить ${p.total}</button></div>` });
+        ${p.over_limit ? `<p class="alert alert-error">${t("За раз — не больше")} ${p.limit}.</p>` : ''}
+        <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">${t("Отмена")}</button>
+        <button class="btn btn-danger" data-act="bulk-yes" ${p.over_limit || !p.total ? 'disabled' : ''}>${t("Удалить")} ${p.total}</button></div>` });
     state.modalHandler = async (act, el) => {
       if (act !== 'bulk-yes') return;
-      await withBusy(el, 'Удаление…', async () => {
+      await withBusy(el, t('Удаление…'), async () => {
         const r = await api('/api/backups/bulk-delete', { method: 'POST', body: { ids } });
         closeModal(); state.selected.clear();
-        toast(r.failures.length ? `Удалено ${r.deleted}, ошибок: ${r.failures.length}` : `Удалено: ${r.deleted}`, !!r.failures.length);
+        toast(r.failures.length ? `${t("Удалено")} ${r.deleted}${t(", ошибок:")} ${r.failures.length}` : `${t("Удалено:")} ${r.deleted}`, !!r.failures.length);
         loadBackups();
       });
     };
-  } catch (e) { openModal({ title: '<h3>Удаление</h3>', body: errorBody(e.message), narrow: true }); }
+  } catch (e) { openModal({ title: `<h3>${t("Удаление")}</h3>`, body: errorBody(e.message), narrow: true }); }
 }
 
 async function restoreBackup(id) {
   state.confirm = null; renderList();
   const b = state.backups.find((x) => x.id === id);
-  openModal({ title: `<h3>Восстановление ${esc(b.device)}</h3>`, body: `<div class="loading">${icon('loader', 'spin')} Загрузка и /import…</div>`, narrow: true });
+  openModal({ title: `<h3>${t("Восстановление")} ${esc(b.device)}</h3>`, body: `<div class="loading">${icon('loader', 'spin')} ${t("Загрузка и /import…")}</div>`, narrow: true });
   try {
     const r = await api(`/api/backups/${id}/restore`, { method: 'POST' });
-    openModal({ title: `<h3>Восстановление ${esc(b.device)}</h3><div class="small mono muted">${esc(b.filename)}</div>`,
-      body: `<div class="alert ${r.ok ? 'alert-ok' : 'alert-error'}">${r.ok ? '/import выполнен' : '/import завершился с ошибками'}</div>
-        <pre class="code mt">${esc(r.output || '(нет вывода)')}</pre>` });
-  } catch (e) { openModal({ title: '<h3>Восстановление</h3>', body: errorBody(e.message), narrow: true }); }
+    openModal({ title: `<h3>${t("Восстановление")} ${esc(b.device)}</h3><div class="small mono muted">${esc(b.filename)}</div>`,
+      body: `<div class="alert ${r.ok ? 'alert-ok' : 'alert-error'}">${r.ok ? t('/import выполнен') : t('/import завершился с ошибками')}</div>
+        <pre class="code mt">${esc(r.output || t('(нет вывода)'))}</pre>` });
+  } catch (e) { openModal({ title: `<h3>${t("Восстановление")}</h3>`, body: errorBody(e.message), narrow: true }); }
 }
 
 async function deleteOne(id) {
   state.confirm = null;
-  try { await api(`/api/backups/${id}`, { method: 'DELETE' }); state.selected.delete(id); toast('Бэкап удалён'); loadBackups(); }
+  try { await api(`/api/backups/${id}`, { method: 'DELETE' }); state.selected.delete(id); toast(t('Бэкап удалён')); loadBackups(); }
   catch (e) { toast(e.message, true); renderList(); }
 }
 
@@ -492,9 +494,9 @@ function bindBackups() {
   btn.onclick = async () => {
     $('create-error').classList.add('hidden');
     try {
-      const r = await withBusy(btn, 'Создание…', () => api('/api/backups', { method: 'POST', body: { device: dev.value, notes: $('create-notes').value } }));
+      const r = await withBusy(btn, t('Создание…'), () => api('/api/backups', { method: 'POST', body: { device: dev.value, notes: $('create-notes').value } }));
       $('create-card').classList.add('hidden'); $('create-notes').value = '';
-      toast(r.changed.length ? `Готово. Изменения: ${r.changed.join(', ')}` : 'Готово. Изменений с прошлого бэкапа нет.');
+      toast(r.changed.length ? `${t("Готово. Изменения:")} ${r.changed.join(', ')}` : t('Готово. Изменений с прошлого бэкапа нет.'));
       loadBackups();
     } catch (e) { $('create-error').textContent = e.message; $('create-error').classList.remove('hidden'); }
     btn.disabled = !dev.value;
@@ -529,35 +531,35 @@ function bindBackups() {
 
 async function loadDevices() {
   const el = $('page-devices');
-  el.innerHTML = `<div class="page-head"><h1>Устройства</h1>
-    <button class="btn btn-primary admin-only" data-act="add">${icon('plus')} Добавить устройство</button></div>
-    <div class="card loading">Загрузка…</div>`;
+  el.innerHTML = `<div class="page-head"><h1>${t("Устройства")}</h1>
+    <button class="btn btn-primary admin-only" data-act="add">${icon('plus')} ${t("Добавить устройство")}</button></div>
+    <div class="card loading">${t("Загрузка…")}</div>`;
   let list;
   try { list = await api('/api/devices'); } catch (e) { el.lastElementChild.outerHTML = errorBody(e.message); return; }
   state.devices = list;
   const rows = list.map((d) => {
     const last = d.last;
-    const status = !d.enabled ? '<span class="status"><span class="dot off"></span>выключено</span>'
-      : !last ? '<span class="status"><span class="dot"></span>ещё не было</span>'
+    const status = !d.enabled ? `<span class="status"><span class="dot off"></span>${t("выключено")}</span>`
+      : !last ? `<span class="status"><span class="dot"></span>${t("ещё не было")}</span>`
         : last.ok ? `<span class="status"><span class="dot ok"></span>${fmtDate(last.at, false)}</span>`
-          : `<span class="status" title="${esc(last.error)}"><span class="dot bad"></span>ошибка · ${fmtDate(last.at, false)}</span>`;
+          : `<span class="status" title="${esc(last.error)}"><span class="dot bad"></span>${t("ошибка ·")} ${fmtDate(last.at, false)}</span>`;
     return `<tr data-id="${d.id}">
       <td class="dev">${esc(d.name)}${d.notes ? `<div class="hint">${esc(d.notes)}</div>` : ''}</td>
       <td class="mono small">${esc(d.host)}</td>
-      <td><span class="badge">${esc(TRANSPORT_LABEL[d.transport])}</span>${d.config_only ? ' <span class="badge">только конфиг</span>' : ''}</td>
+      <td><span class="badge">${esc(TRANSPORT_LABEL[d.transport])}</span>${d.config_only ? ` <span class="badge">${t("только конфиг")}</span>` : ''}</td>
       <td>${status}</td>
       <td class="actions admin-only">
-        <button class="icon-btn" data-act="edit" title="Изменить">${icon('edit', 'i-sm')}</button>
-        <button class="icon-btn" data-act="check" title="Проверить доступ">${icon('check', 'i-sm')}</button>
-        <button class="icon-btn" data-act="backup" title="Бэкап сейчас">${icon('play', 'i-sm')}</button>
-        <button class="icon-btn danger" data-act="delete" title="Удалить">${icon('trash', 'i-sm')}</button>
+        <button class="icon-btn" data-act="edit" title="${t("Изменить")}">${icon('edit', 'i-sm')}</button>
+        <button class="icon-btn" data-act="check" title="${t("Проверить доступ")}">${icon('check', 'i-sm')}</button>
+        <button class="icon-btn" data-act="backup" title="${t("Бэкап сейчас")}">${icon('play', 'i-sm')}</button>
+        <button class="icon-btn danger" data-act="delete" title="${t("Удалить")}">${icon('trash', 'i-sm')}</button>
       </td></tr>`;
   }).join('');
   el.lastElementChild.outerHTML = list.length
-    ? `<div class="card table-wrap"><table><thead><tr><th>Имя</th><th>Адрес</th><th>Транспорт</th><th>Последний бэкап</th><th class="admin-only col-actions">Действия</th></tr></thead>
+    ? `<div class="card table-wrap"><table><thead><tr><th>${t("Имя")}</th><th>${t("Адрес")}</th><th>${t("Транспорт")}</th><th>${t("Последний бэкап")}</th><th class="admin-only col-actions">${t("Действия")}</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`
-    : `<div class="card empty">${icon('drive')}<strong>Устройств пока нет</strong>
-      <span class="muted small">Добавьте роутер: адрес, пользователь на RouterOS и способ подключения.</span></div>`;
+    : `<div class="card empty">${icon('drive')}<strong>${t("Устройств пока нет")}</strong>
+      <span class="muted small">${t("Добавьте роутер: адрес, пользователь на RouterOS и способ подключения.")}</span></div>`;
   el.onclick = (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act, tr = e.target.closest('tr[data-id]');
     const dev = tr && state.devices.find((d) => d.id === Number(tr.dataset.id));
@@ -579,59 +581,59 @@ function deviceForm(dev) {
   const tlsMode = d.tls_insecure ? 'insecure' : d.tls_ca ? 'ca' : 'fingerprint';
   const certsMode = Array.isArray(d.certs) ? 'list' : d.certs;
   const opt = (v, cur, label) => `<option value="${v}"${String(cur) === String(v) ? ' selected' : ''}>${label}</option>`;
-  openModal({ title: `<h3>${dev ? esc(dev.name) : 'Новое устройство'}</h3>`, body: `
+  openModal({ title: `<h3>${dev ? esc(dev.name) : t('Новое устройство')}</h3>`, body: `
   <form id="dev-form" autocomplete="off">
-    <fieldset><legend>Основное</legend><div class="form-grid">
-      <label>Имя <input class="input" name="name" value="${esc(d.name || '')}" required pattern="[A-Za-z0-9._\\-]+" placeholder="core-rtr1">
-        <span class="hint">Латиница, цифры, . _ - — это и имя папки с бэкапами</span></label>
-      <label>Адрес <input class="input" name="host" value="${esc(d.host)}" required placeholder="10.0.0.1"></label>
-      <label>Пользователь RouterOS <input class="input" name="username" value="${esc(d.username)}" required></label>
-      <label>Пароль <input class="input" type="password" name="password" autocomplete="new-password"
-        placeholder="${d.password_set ? 'задан — оставьте пустым, чтобы не менять' : ''}" ${d.password_set ? '' : 'required'}></label>
-      <label class="wide">Заметка <input class="input" name="notes" value="${esc(d.notes)}"></label>
-      <label class="check"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}> Включено в расписание</label>
+    <fieldset><legend>${t("Основное")}</legend><div class="form-grid">
+      <label>${t("Имя")} <input class="input" name="name" value="${esc(d.name || '')}" required pattern="[A-Za-z0-9._\\-]+" placeholder="core-rtr1">
+        <span class="hint">${t("Латиница, цифры, . _ - — это и имя папки с бэкапами")}</span></label>
+      <label>${t("Адрес")} <input class="input" name="host" value="${esc(d.host)}" required placeholder="10.0.0.1"></label>
+      <label>${t("Пользователь RouterOS")} <input class="input" name="username" value="${esc(d.username)}" required></label>
+      <label>${t("Пароль")} <input class="input" type="password" name="password" autocomplete="new-password"
+        placeholder="${d.password_set ? t('задан — оставьте пустым, чтобы не менять') : ''}" ${d.password_set ? '' : 'required'}></label>
+      <label class="wide">${t("Заметка")} <input class="input" name="notes" value="${esc(d.notes)}"></label>
+      <label class="check"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}> ${t("Включено в расписание")}</label>
     </div></fieldset>
-    <fieldset><legend>Что и как забирать</legend><div class="form-grid">
-      <label>Транспорт <select class="input" name="transport">
-        ${opt('sftp', d.transport, 'API + SFTP (по умолчанию)')}${opt('api', d.transport, 'Только API-SSL')}${opt('ssh', d.transport, 'Только SSH')}</select>
+    <fieldset><legend>${t("Что и как забирать")}</legend><div class="form-grid">
+      <label>${t("Транспорт")} <select class="input" name="transport">
+        ${opt('sftp', d.transport, t('API + SFTP (по умолчанию)'))}${opt('api', d.transport, t('Только API-SSL'))}${opt('ssh', d.transport, t('Только SSH'))}</select>
         <span class="hint" data-hint="transport"></span></label>
-      <label class="check"><input type="checkbox" name="config_only" ${d.config_only ? 'checked' : ''}> Только конфиг (без .backup и сертификатов)</label>
-      <label data-show="api">Бинарные файлы через API <select class="input" name="api_binary">
-        ${opt('base64', d.api_binary, 'base64 (рекомендуется)')}${opt('raw', d.api_binary, 'raw')}${opt('skip', d.api_binary, 'не забирать (без .backup)')}</select></label>
-      <label data-show="b64">Размер куска base64 <input class="input" type="number" name="api_b64_chunk" min="3072" max="32768" step="1024" value="${d.api_b64_chunk}"></label>
-      <label data-show="certs">Формат сертификатов <select class="input" name="cert_format">
-        ${opt('', d.cert_format || '', 'авто')}${opt('p12', d.cert_format, 'PKCS#12 (.p12)')}${opt('pem', d.cert_format, 'PEM (.crt + .key)')}</select></label>
-      <label data-show="certs">Какие сертификаты <select class="input" name="certs_mode">
-        ${opt('all', certsMode, 'все с приватным ключом')}${opt('list', certsMode, 'только перечисленные')}${opt('none', certsMode, 'не выгружать')}</select></label>
-      <label class="wide" data-show="certs-list">Имена сертификатов, по одному в строке
+      <label class="check"><input type="checkbox" name="config_only" ${d.config_only ? 'checked' : ''}> ${t("Только конфиг (без .backup и сертификатов)")}</label>
+      <label data-show="api">${t("Бинарные файлы через API")} <select class="input" name="api_binary">
+        ${opt('base64', d.api_binary, t('base64 (рекомендуется)'))}${opt('raw', d.api_binary, 'raw')}${opt('skip', d.api_binary, t('не забирать (без .backup)'))}</select></label>
+      <label data-show="b64">${t("Размер куска base64")} <input class="input" type="number" name="api_b64_chunk" min="3072" max="32768" step="1024" value="${d.api_b64_chunk}"></label>
+      <label data-show="certs">${t("Формат сертификатов")} <select class="input" name="cert_format">
+        ${opt('', d.cert_format || '', t('авто'))}${opt('p12', d.cert_format, 'PKCS#12 (.p12)')}${opt('pem', d.cert_format, 'PEM (.crt + .key)')}</select></label>
+      <label data-show="certs">${t("Какие сертификаты")} <select class="input" name="certs_mode">
+        ${opt('all', certsMode, t('все с приватным ключом'))}${opt('list', certsMode, t('только перечисленные'))}${opt('none', certsMode, t('не выгружать'))}</select></label>
+      <label class="wide" data-show="certs-list">${t("Имена сертификатов, по одному в строке")}
         <textarea class="input" name="certs_list">${esc(Array.isArray(d.certs) ? d.certs.join('\n') : '')}</textarea></label>
     </div></fieldset>
-    <fieldset data-show="tls"><legend>Проверка TLS-сертификата API-SSL</legend><div class="form-grid">
-      <label class="check"><input type="radio" name="tls_mode" value="fingerprint" ${tlsMode === 'fingerprint' ? 'checked' : ''}> Отпечаток SHA-256</label>
-      <label class="check"><input type="radio" name="tls_mode" value="ca" ${tlsMode === 'ca' ? 'checked' : ''}> Сертификат / CA (PEM)</label>
-      <label class="check"><input type="radio" name="tls_mode" value="insecure" ${tlsMode === 'insecure' ? 'checked' : ''}> Не проверять (небезопасно)</label>
-      <label class="wide" data-show="tls-fp">Отпечаток
+    <fieldset data-show="tls"><legend>${t("Проверка TLS-сертификата API-SSL")}</legend><div class="form-grid">
+      <label class="check"><input type="radio" name="tls_mode" value="fingerprint" ${tlsMode === 'fingerprint' ? 'checked' : ''}> ${t("Отпечаток SHA-256")}</label>
+      <label class="check"><input type="radio" name="tls_mode" value="ca" ${tlsMode === 'ca' ? 'checked' : ''}> ${t("Сертификат / CA (PEM)")}</label>
+      <label class="check"><input type="radio" name="tls_mode" value="insecure" ${tlsMode === 'insecure' ? 'checked' : ''}> ${t("Не проверять (небезопасно)")}</label>
+      <label class="wide" data-show="tls-fp">${t("Отпечаток")}
         <span class="row gap"><input class="input mono grow1" name="tls_fingerprint" value="${esc(d.tls_fingerprint || '')}" placeholder="E6:36:18:…">
-        <button type="button" class="btn btn-sm" data-act="fetch-fp">${icon('key', 'i-sm')} Получить с устройства</button></span>
-        <span class="hint" id="fp-info">Сверьте с /certificate print detail на роутере.</span></label>
+        <button type="button" class="btn btn-sm" data-act="fetch-fp">${icon('key', 'i-sm')} ${t("Получить с устройства")}</button></span>
+        <span class="hint" id="fp-info">${t("Сверьте с /certificate print detail на роутере.")}</span></label>
       <label class="wide" data-show="tls-ca">PEM <textarea class="input" name="tls_ca" placeholder="-----BEGIN CERTIFICATE-----">${esc(d.tls_ca || '')}</textarea></label>
-      <label class="check"><input type="checkbox" name="tls_legacy" ${d.tls_legacy ? 'checked' : ''}> Разрешить слабые ключи (1024 бит)</label>
+      <label class="check"><input type="checkbox" name="tls_legacy" ${d.tls_legacy ? 'checked' : ''}> ${t("Разрешить слабые ключи (1024 бит)")}</label>
     </div></fieldset>
-    <fieldset><legend>Подключение</legend><div class="form-grid">
-      <label data-show="tls">Порт API-SSL <input class="input" type="number" name="api_port" min="1" max="65535" value="${d.api_port}"></label>
-      <label>Порт SSH <input class="input" type="number" name="ssh_port" min="1" max="65535" value="${d.ssh_port}"></label>
-      <label>Таймаут, с <input class="input" type="number" name="timeout" min="1" max="600" value="${d.timeout}"></label>
-      <label>Кодировка <select class="input" name="encoding">${opt('utf-8', d.encoding, 'UTF-8')}${opt('cp1251', d.encoding, 'Windows-1251')}</select>
-        <span class="hint">cp1251 — если имена и комментарии набирались в Winbox по-русски</span></label>
+    <fieldset><legend>${t("Подключение")}</legend><div class="form-grid">
+      <label data-show="tls">${t("Порт API-SSL")} <input class="input" type="number" name="api_port" min="1" max="65535" value="${d.api_port}"></label>
+      <label>${t("Порт SSH")} <input class="input" type="number" name="ssh_port" min="1" max="65535" value="${d.ssh_port}"></label>
+      <label>${t("Таймаут, с")} <input class="input" type="number" name="timeout" min="1" max="600" value="${d.timeout}"></label>
+      <label>${t("Кодировка")} <select class="input" name="encoding">${opt('utf-8', d.encoding, 'UTF-8')}${opt('cp1251', d.encoding, 'Windows-1251')}</select>
+        <span class="hint">${t("cp1251 — если имена и комментарии набирались в Winbox по-русски")}</span></label>
     </div></fieldset>
     <div class="alert alert-error hidden" id="dev-error"></div>
     <pre class="code hidden" id="dev-result"></pre>
     <div class="row gap dialog-actions">
-      ${dev ? `<button type="button" class="btn" data-act="dev-check">Проверить доступ</button>
-               <button type="button" class="btn" data-act="dev-probe">Проверить транспорты</button>` : ''}
+      ${dev ? `<button type="button" class="btn" data-act="dev-check">${t("Проверить доступ")}</button>
+               <button type="button" class="btn" data-act="dev-probe">${t("Проверить транспорты")}</button>` : ''}
       <span class="push"></span>
-      <button type="button" class="btn" data-act="modal-close">Отмена</button>
-      <button class="btn btn-primary">${dev ? 'Сохранить' : 'Добавить'}</button>
+      <button type="button" class="btn" data-act="modal-close">${t("Отмена")}</button>
+      <button class="btn btn-primary">${dev ? t('Сохранить') : t('Добавить')}</button>
     </div>
   </form>` });
 
@@ -645,9 +647,9 @@ function deviceForm(dev) {
     };
     form.querySelectorAll('[data-show]').forEach((el) => el.classList.toggle('hidden', !show[el.dataset.show]));
     form.querySelector('[data-hint=transport]').textContent = {
-      sftp: 'Команды по API-SSL (8729), файлы по SFTP (22). Надёжно для всего.',
-      api: 'Только порт 8729, RouterOS 7.13+. Бинарные файлы — обходным путём.',
-      ssh: 'Только порт 22. Конфиг читается из вывода /export — без файлов на роутере.',
+      sftp: t('Команды по API-SSL (8729), файлы по SFTP (22). Надёжно для всего.'),
+      api: t('Только порт 8729, RouterOS 7.13+. Бинарные файлы — обходным путём.'),
+      ssh: t('Только порт 22. Конфиг читается из вывода /export — без файлов на роутере.'),
     }[v.transport];
   };
   form.addEventListener('change', sync); sync();
@@ -658,23 +660,23 @@ function deviceForm(dev) {
   state.modalHandler = async (act, el) => {
     if (act === 'fetch-fp') {
       const v = formValues(form);
-      await withBusy(el, 'Запрос…', async () => {
+      await withBusy(el, t('Запрос…'), async () => {
         try {
           const r = await api('/api/tools/fingerprint', { method: 'POST', body: { host: v.host, port: v.api_port } });
           form.querySelector('[name=tls_fingerprint]').value = r.fingerprint;
-          $('fp-info').textContent = `${r.subject}, действует до ${r.not_after}, ключ ${r.key_bits} бит. Сверьте отпечаток с роутером!`;
+          $('fp-info').textContent = `${r.subject}${t(", действует до")} ${r.not_after}${t(", ключ")} ${r.key_bits} ${t("бит. Сверьте отпечаток с роутером!")}`;
         } catch (ex) { $('fp-info').textContent = ex.message; }
       });
     }
     if (act === 'dev-check') {
-      await withBusy(el, 'Проверка…', async () => {
+      await withBusy(el, t('Проверка…'), async () => {
         const r = await api(`/api/devices/${dev.id}/check`, { method: 'POST' });
-        showResult(r.error ? `Ошибка: ${r.error}` : `${r.identity}, RouterOS ${r.version}\nГруппа: ${r.group}\nТранспорт ${r.transport}: ${r.files}\n`
-          + (r.missing_policies.length ? `Не хватает политик: ${r.missing_policies.join(', ')}` : 'Права группы: достаточно'), r.ok);
+        showResult(r.error ? `${t("Ошибка:")} ${r.error}` : `${r.identity}, RouterOS ${r.version}\n${t("Группа:")} ${r.group}\n${t("Транспорт")} ${r.transport}: ${r.files}\n`
+          + (r.missing_policies.length ? `${t("Не хватает политик:")} ${r.missing_policies.join(', ')}` : t('Права группы: достаточно')), r.ok);
       });
     }
     if (act === 'dev-probe') {
-      await withBusy(el, 'Проверка… (до минуты)', async () => {
+      await withBusy(el, t('Проверка… (до минуты)'), async () => {
         const r = await api(`/api/devices/${dev.id}/probe`, { method: 'POST', body: { sftp: true } });
         showResult(r.report, r.ok);
       });
@@ -693,39 +695,39 @@ function deviceForm(dev) {
     if (!body.password) delete body.password;
     try {
       await api(dev ? `/api/devices/${dev.id}` : '/api/devices', { method: dev ? 'PUT' : 'POST', body });
-      closeModal(); toast(dev ? 'Устройство сохранено' : 'Устройство добавлено');
+      closeModal(); toast(dev ? t('Устройство сохранено') : t('Устройство добавлено'));
       state.me = await api('/api/me'); renderBanners(); loadDevices();
     } catch (ex) { $('dev-error').textContent = ex.message; $('dev-error').classList.remove('hidden'); }
   };
 }
 
 async function deviceCheck(dev) {
-  openModal({ title: `<h3>Проверка ${esc(dev.name)}</h3>`, body: loadingBody, narrow: true });
+  openModal({ title: `<h3>${t("Проверка")} ${esc(dev.name)}</h3>`, body: loadingBody, narrow: true });
   try {
     const r = await api(`/api/devices/${dev.id}/check`, { method: 'POST' });
-    openModal({ title: `<h3>Проверка ${esc(dev.name)}</h3>`, narrow: true, body: r.error
+    openModal({ title: `<h3>${t("Проверка")} ${esc(dev.name)}</h3>`, narrow: true, body: r.error
       ? errorBody(r.error)
-      : `<div class="alert ${r.ok ? 'alert-ok' : 'alert-error'}">${r.ok ? 'Доступ есть, прав достаточно' : 'Не хватает политик: ' + esc(r.missing_policies.join(', '))}</div>
-         <pre class="code mt">${esc(`${r.identity}, RouterOS ${r.version}\nГруппа: ${r.group}\nТранспорт ${r.transport}: ${r.files}`)}</pre>` });
-  } catch (e) { openModal({ title: '<h3>Проверка</h3>', body: errorBody(e.message), narrow: true }); }
+      : `<div class="alert ${r.ok ? 'alert-ok' : 'alert-error'}">${r.ok ? t('Доступ есть, прав достаточно') : t('Не хватает политик: ') + esc(r.missing_policies.join(', '))}</div>
+         <pre class="code mt">${esc(`${r.identity}, RouterOS ${r.version}\n${t("Группа:")} ${r.group}\n${t("Транспорт")} ${r.transport}: ${r.files}`)}</pre>` });
+  } catch (e) { openModal({ title: `<h3>${t("Проверка")}</h3>`, body: errorBody(e.message), narrow: true }); }
 }
 
 async function deviceBackup(dev, btn) {
   try {
     const r = await withBusy(btn, '', () => api(`/api/devices/${dev.id}/backup`, { method: 'POST', body: {} }));
-    toast(`${dev.name}: ${r.changed.length ? 'изменения — ' + r.changed.join(', ') : 'без изменений'}`);
+    toast(`${dev.name}: ${r.changed.length ? t('изменения — ') + r.changed.join(', ') : t('без изменений')}`);
     loadDevices();
   } catch (e) { toast(`${dev.name}: ${e.message}`, true); loadDevices(); }
 }
 
 function deviceDelete(dev) {
-  openModal({ title: `<h3>Удалить ${esc(dev.name)}?</h3>`, narrow: true, body: `
-    <p>Устройство пропадёт из расписания. Уже сделанные бэкапы останутся в папке и в списке бэкапов.</p>
-    <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">Отмена</button>
-    <button class="btn btn-danger" data-act="yes">Удалить</button></div>` });
+  openModal({ title: `<h3>${t("Удалить")} ${esc(dev.name)}?</h3>`, narrow: true, body: `
+    <p>${t("Устройство пропадёт из расписания. Уже сделанные бэкапы останутся в папке и в списке бэкапов.")}</p>
+    <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">${t("Отмена")}</button>
+    <button class="btn btn-danger" data-act="yes">${t("Удалить")}</button></div>` });
   state.modalHandler = async (act) => {
     if (act !== 'yes') return;
-    try { await api(`/api/devices/${dev.id}`, { method: 'DELETE' }); closeModal(); toast('Устройство удалено');
+    try { await api(`/api/devices/${dev.id}`, { method: 'DELETE' }); closeModal(); toast(t('Устройство удалено'));
       state.me = await api('/api/me'); renderBanners(); loadDevices(); }
     catch (e) { toast(e.message, true); }
   };
@@ -737,12 +739,12 @@ async function loadRuns() {
   const el = $('page-runs');
   let data;
   try { data = await api('/api/runs?limit=100'); } catch (e) { el.innerHTML = errorBody(e.message); return; }
-  const KIND = { scheduled: 'По расписанию', manual: 'Ручной' };
+  const KIND = { scheduled: t('По расписанию'), manual: t('Ручной') };
   const rows = data.runs.map((r) => {
     const failed = Object.keys(r.failed).length, changed = Object.keys(r.changed).length;
-    const dur = r.finished_at ? `${Math.max(1, Math.round(r.finished_at - r.started_at))} с` : 'идёт…';
-    const status = !r.finished_at ? '<span class="badge warn">идёт</span>'
-      : failed ? `<span class="badge bad">ошибок: ${failed}</span>` : r.warnings.length ? '<span class="badge warn">предупреждения</span>' : '<span class="badge ok">успешно</span>';
+    const dur = r.finished_at ? `${Math.max(1, Math.round(r.finished_at - r.started_at))} ${t("с")}` : t('идёт…');
+    const status = !r.finished_at ? `<span class="badge warn">${t("идёт")}</span>`
+      : failed ? `<span class="badge bad">${t("ошибок:")} ${failed}</span>` : r.warnings.length ? `<span class="badge warn">${t("предупреждения")}</span>` : `<span class="badge ok">${t("успешно")}</span>`;
     const details = [
       ...Object.entries(r.failed).map(([n, e]) => `<div class="err-text"><b>${esc(n)}</b>: ${esc(e)}</div>`),
       ...Object.entries(r.changed).map(([n, c]) => `<div><b>${esc(n)}</b>: ${esc(c.join(', '))}</div>`),
@@ -752,13 +754,13 @@ async function loadRuns() {
       <td>${status}</td><td class="num">${r.ok.length}/${r.devices.length}</td><td class="num">${changed || '—'}</td><td class="num">${dur}</td></tr>
       ${details ? `<tr class="details"><td colspan="6">${details}</td></tr>` : ''}`;
   }).join('');
-  el.innerHTML = `<div class="page-head"><h1>Журнал запусков</h1>
-      <button class="btn btn-primary admin-only" id="run-all" ${data.running ? 'disabled' : ''}>${icon('play')} ${data.running ? 'Прогон идёт…' : 'Запустить сейчас'}</button></div>
-    ${data.runs.length ? `<div class="card table-wrap"><table><thead><tr><th>Начало</th><th>Тип</th><th>Статус</th><th>Успешно</th><th>С изменениями</th><th>Длительность</th></tr></thead>
-      <tbody class="static">${rows}</tbody></table></div>` : `<div class="card empty">${icon('drive')}<strong>Запусков ещё не было</strong></div>`}`;
+  el.innerHTML = `<div class="page-head"><h1>${t("Журнал запусков")}</h1>
+      <button class="btn btn-primary admin-only" id="run-all" ${data.running ? 'disabled' : ''}>${icon('play')} ${data.running ? t('Прогон идёт…') : t('Запустить сейчас')}</button></div>
+    ${data.runs.length ? `<div class="card table-wrap"><table><thead><tr><th>${t("Начало")}</th><th>${t("Тип")}</th><th>${t("Статус")}</th><th>${t("Успешно")}</th><th>${t("С изменениями")}</th><th>${t("Длительность")}</th></tr></thead>
+      <tbody class="static">${rows}</tbody></table></div>` : `<div class="card empty">${icon('drive')}<strong>${t("Запусков ещё не было")}</strong></div>`}`;
   const btn = $('run-all');
   if (btn) btn.onclick = async () => {
-    try { await api('/api/runs', { method: 'POST' }); toast('Прогон запущен по всем включённым устройствам'); setTimeout(loadRuns, 800); }
+    try { await api('/api/runs', { method: 'POST' }); toast(t('Прогон запущен по всем включённым устройствам')); setTimeout(loadRuns, 800); }
     catch (e) { toast(e.message, true); }
   };
   if (data.running) state.runsTimer = setTimeout(() => state.page === 'runs' && loadRuns(), 3000);
@@ -770,7 +772,7 @@ const SECRET_KEYS = new Set(['backup_passphrase', 'gitea_token', 'telegram_token
 
 async function loadSettings() {
   const el = $('page-settings');
-  el.innerHTML = '<div class="page-head"><h1>Настройки</h1></div><div class="card loading">Загрузка…</div>';
+  el.innerHTML = `<div class="page-head"><h1>${t("Настройки")}</h1></div><div class="card loading">${t("Загрузка…")}</div>`;
   let data;
   try { data = await api('/api/settings'); } catch (e) { el.lastElementChild.outerHTML = errorBody(e.message); return; }
   renderSettings(data);
@@ -779,67 +781,70 @@ async function loadSettings() {
 function renderSettings(data) {
   const s = data.settings, el = $('page-settings');
   const secret = (key, label, hint = '') => `<label>${label}
-      <span class="secret-state ${s[key].set ? 'set' : 'unset'}">${s[key].set ? '● задан' : '○ не задан'}</span>
-      <input class="input" type="password" name="${key}" autocomplete="new-password" placeholder="${s[key].set ? 'оставьте пустым, чтобы не менять' : ''}">
-      ${s[key].set ? `<span class="check hint"><input type="checkbox" data-clear="${key}"> удалить</span>` : ''}
+      <span class="secret-state ${s[key].set ? 'set' : 'unset'}">${s[key].set ? t('● задан') : t('○ не задан')}</span>
+      <input class="input" type="password" name="${key}" autocomplete="new-password" placeholder="${s[key].set ? t('оставьте пустым, чтобы не менять') : ''}">
+      ${s[key].set ? `<span class="check hint"><input type="checkbox" data-clear="${key}"> ${t("удалить")}</span>` : ''}
       ${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
   const text = (key, label, hint = '', attrs = '') => `<label>${label}<input class="input" name="${key}" value="${esc(s[key])}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
   const num = (key, label, min, max, hint = '') => `<label>${label}<input class="input" type="number" name="${key}" min="${min}" max="${max}" value="${s[key]}">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
   const chk = (key, label) => `<label class="check"><input type="checkbox" name="${key}" ${s[key] ? 'checked' : ''}> ${label}</label>`;
-  el.innerHTML = `<div class="page-head"><h1>Настройки</h1></div>
+  el.innerHTML = `<div class="page-head"><h1>${t("Настройки")}</h1></div>
   <form id="settings-form" autocomplete="off"><div class="settings-grid">
-    <section class="card"><h3>Расписание</h3><div class="form-grid">
-      ${text('schedule', 'Cron-выражение', 'мин час день месяц день_недели. «0 3 * * *» — каждый день в 03:00', 'required')}
-      ${text('timezone', 'Часовой пояс', 'Например, Europe/Moscow')}
-      ${num('workers', 'Устройств параллельно', 1, 32)}
-      <div class="wide hint">Следующий запуск: <b>${data.next_run ? fmtDate(data.next_run) : '—'}</b></div>
+    <section class="card"><h3>${t("Расписание")}</h3><div class="form-grid">
+      ${text('schedule', t('Cron-выражение'), t('мин час день месяц день_недели. «0 3 * * *» — каждый день в 03:00'), 'required')}
+      ${text('timezone', t('Часовой пояс'), t('Например, Europe/Moscow'))}
+      ${num('workers', t('Устройств параллельно'), 1, 32)}
+      <div class="wide hint">${t("Следующий запуск:")} <b>${data.next_run ? fmtDate(data.next_run) : '—'}</b></div>
     </div></section>
 
-    <section class="card"><h3>Хранение и шифрование</h3><div class="form-grid">
-      ${secret('backup_passphrase', 'Пароль шифрования .backup и сертификатов', 'Храните его отдельно: без него бэкапы не восстановить')}
-      <label>Режим хранения <select class="input" name="storage">
-        <option value="git"${s.storage === 'git' ? ' selected' : ''}>git — текущее состояние + история</option>
-        <option value="snapshots"${s.storage === 'snapshots' ? ' selected' : ''}>снимки — папка с датой на каждый прогон</option></select></label>
-      <div data-show="git" class="wide">${chk('git_history', 'Вести историю изменений в git')}</div>
-      <div data-show="snapshots">${num('snapshot_retention_days', 'Хранить снимки, дней', 0, 36500, '0 — хранить все')}</div>
-      <div data-show="snapshots">${num('snapshot_keep_min', 'Всегда оставлять последних', 1, 10000)}</div>
-      <div data-show="snapshots" class="wide">${chk('snapshot_on_change', 'Создавать снимок только при изменениях')}</div>
+    <section class="card"><h3>${t("Хранение и шифрование")}</h3><div class="form-grid">
+      ${secret('backup_passphrase', t('Пароль шифрования .backup и сертификатов'), t('Храните его отдельно: без него бэкапы не восстановить'))}
+      <label>${t("Режим хранения")} <select class="input" name="storage">
+        <option value="git"${s.storage === 'git' ? ' selected' : ''}>${t("git — текущее состояние + история")}</option>
+        <option value="snapshots"${s.storage === 'snapshots' ? ' selected' : ''}>${t("снимки — папка с датой на каждый прогон")}</option></select></label>
+      <div data-show="git" class="wide">${chk('git_history', t('Вести историю изменений в git'))}</div>
+      <div data-show="snapshots">${num('snapshot_retention_days', t('Хранить снимки, дней'), 0, 36500, t('0 — хранить все'))}</div>
+      <div data-show="snapshots">${num('snapshot_keep_min', t('Всегда оставлять последних'), 1, 10000)}</div>
+      <div data-show="snapshots" class="wide">${chk('snapshot_on_change', t('Создавать снимок только при изменениях'))}</div>
     </div></section>
 
-    <section class="card" data-show="git"><h3>Gitea <span class="muted small">— необязательно</span></h3><div class="form-grid">
-      <label class="wide">URL репозитория<input class="input" name="gitea_url" value="${esc(s.gitea_url)}" placeholder="https://gitea.local/netops/mikrotik-backups.git"><span class="hint">Пусто — push выключен</span></label>
-      ${text('gitea_user', 'Пользователь')}
-      ${secret('gitea_token', 'Токен доступа', 'Право write:repository')}
-      ${text('gitea_branch', 'Ветка')}
-      ${text('git_author_name', 'Автор коммитов')}
-      ${text('git_author_email', 'E-mail автора')}
-      <label class="wide">CA Gitea (PEM), если самоподписанный<textarea class="input" name="gitea_ca_pem" placeholder="-----BEGIN CERTIFICATE-----">${esc(s.gitea_ca_pem)}</textarea></label>
-      ${chk('gitea_insecure', 'Не проверять TLS Gitea (небезопасно)')}
+    <section class="card" data-show="git"><h3>Gitea <span class="muted small">${t("— необязательно")}</span></h3><div class="form-grid">
+      <label class="wide">${t("URL репозитория")}<input class="input" name="gitea_url" value="${esc(s.gitea_url)}" placeholder="https://gitea.local/netops/mikrotik-backups.git"><span class="hint">${t("Пусто — push выключен")}</span></label>
+      ${text('gitea_user', t('Пользователь'))}
+      ${secret('gitea_token', t('Токен доступа'), t('Право write:repository'))}
+      ${text('gitea_branch', t('Ветка'))}
+      ${text('git_author_name', t('Автор коммитов'))}
+      ${text('git_author_email', t('E-mail автора'))}
+      <label class="wide">${t("CA Gitea (PEM), если самоподписанный")}<textarea class="input" name="gitea_ca_pem" placeholder="-----BEGIN CERTIFICATE-----">${esc(s.gitea_ca_pem)}</textarea></label>
+      ${chk('gitea_insecure', t('Не проверять TLS Gitea (небезопасно)'))}
     </div></section>
 
-    <section class="card"><h3>Уведомления в Telegram <span class="muted small">— необязательно</span></h3><div class="form-grid">
-      ${secret('telegram_token', 'Токен бота')}
+    <section class="card"><h3>${t("Уведомления в Telegram")} <span class="muted small">${t("— необязательно")}</span></h3><div class="form-grid">
+      ${secret('telegram_token', t('Токен бота'))}
       ${text('telegram_chat', 'chat_id')}
-      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="test-tg">Отправить тестовое сообщение</button>
-        <span class="hint">Сначала сохраните настройки. Уведомления приходят при ошибках и изменениях.</span></div>
+      <label>${t("Язык уведомлений")} <select class="input" name="notify_lang">
+        <option value="ru"${s.notify_lang === 'ru' ? ' selected' : ''}>Русский</option>
+        <option value="en"${s.notify_lang === 'en' ? ' selected' : ''}>English</option></select></label>
+      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="test-tg">${t("Отправить тестовое сообщение")}</button>
+        <span class="hint">${t("Сначала сохраните настройки. Уведомления приходят при ошибках и изменениях.")}</span></div>
     </div></section>
 
-    <section class="card"><h3>Веб-интерфейс</h3><div class="form-grid">
-      <div class="wide">${chk('web_restore', 'Разрешить восстановление (/import по SSH) из списка бэкапов')}</div>
-      <div class="wide hint">Cookie сессии ${data.cookie_secure ? 'с флагом Secure (HTTPS)' : 'без флага Secure — для работы через HTTPS за прокси задайте WEB_COOKIE_SECURE=true'}.</div>
+    <section class="card"><h3>${t("Веб-интерфейс")}</h3><div class="form-grid">
+      <div class="wide">${chk('web_restore', t('Разрешить восстановление (/import по SSH) из списка бэкапов'))}</div>
+      <div class="wide hint">${t("Cookie сессии")} ${data.cookie_secure ? t('с флагом Secure (HTTPS)') : t('без флага Secure — для работы через HTTPS за прокси задайте WEB_COOKIE_SECURE=true')}.</div>
     </div></section>
   </div>
   <div class="alert alert-error hidden mt" id="settings-error"></div>
   <div class="sticky-save mt"><span class="muted small" id="settings-dirty"></span>
-    <button type="button" class="btn" data-act="reset">Отменить изменения</button>
-    <button class="btn btn-primary">Сохранить</button></div>
+    <button type="button" class="btn" data-act="reset">${t("Отменить изменения")}</button>
+    <button class="btn btn-primary">${t("Сохранить")}</button></div>
   </form>`;
 
   const form = $('settings-form');
   const sync = () => {
     const v = formValues(form);
     form.querySelectorAll('[data-show]').forEach((x) => x.classList.toggle('hidden', x.dataset.show !== v.storage));
-    $('settings-dirty').textContent = Object.keys(collect()).length ? 'Есть несохранённые изменения' : '';
+    $('settings-dirty').textContent = Object.keys(collect()).length ? t('Есть несохранённые изменения') : '';
   };
   const collect = () => {
     const v = formValues(form), out = {};
@@ -856,8 +861,8 @@ function renderSettings(data) {
     if (act === 'reset') renderSettings(data);
     if (act === 'test-tg') {
       const btn = e.target.closest('button');
-      await withBusy(btn, 'Отправка…', async () => {
-        try { await api('/api/settings/test-telegram', { method: 'POST' }); toast('Сообщение отправлено'); }
+      await withBusy(btn, t('Отправка…'), async () => {
+        try { await api('/api/settings/test-telegram', { method: 'POST' }); toast(t('Сообщение отправлено')); }
         catch (ex) { toast(ex.message, true); }
       });
     }
@@ -865,10 +870,10 @@ function renderSettings(data) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const changes = collect();
-    if (!Object.keys(changes).length) return toast('Нет изменений');
+    if (!Object.keys(changes).length) return toast(t('Нет изменений'));
     try {
       const r = await api('/api/settings', { method: 'PUT', body: changes });
-      toast(`Сохранено: ${r.changed.length}`);
+      toast(`${t("Сохранено:")} ${r.changed.length}`);
       state.me = await api('/api/me'); renderBanners(); renderSettings(r);
     } catch (ex) { $('settings-error').textContent = ex.message; $('settings-error').classList.remove('hidden'); }
   };
@@ -881,26 +886,26 @@ async function loadUsers() {
   let list;
   try { list = await api('/api/users'); } catch (e) { el.innerHTML = errorBody(e.message); return; }
   const rows = list.map((u) => {
-    const st = !u.password_set ? '<span class="badge warn">пароль не задан</span>'
-      : u.must_set_password ? '<span class="badge warn">временный пароль</span>' : '<span class="badge ok">активен</span>';
+    const st = !u.password_set ? `<span class="badge warn">${t("пароль не задан")}</span>`
+      : u.must_set_password ? `<span class="badge warn">${t("временный пароль")}</span>` : `<span class="badge ok">${t("активен")}</span>`;
     const self = u.username === state.me.user;
-    return `<tr data-id="${u.id}"><td class="dev">${esc(u.username)}${self ? ' <span class="muted small">(вы)</span>' : ''}</td>
+    return `<tr data-id="${u.id}"><td class="dev">${esc(u.username)}${self ? ` <span class="muted small">${t("(вы)")}</span>` : ''}</td>
       <td><select class="input input-sm" data-act="role">
-        <option value="admin"${u.role === 'admin' ? ' selected' : ''}>администратор</option>
-        <option value="viewer"${u.role === 'viewer' ? ' selected' : ''}>просмотр</option></select></td>
+        <option value="admin"${u.role === 'admin' ? ' selected' : ''}>${t("администратор")}</option>
+        <option value="viewer"${u.role === 'viewer' ? ' selected' : ''}>${t("просмотр")}</option></select></td>
       <td>${st}</td><td class="date">${u.last_login ? fmtDate(u.last_login) : '—'}</td>
-      <td class="actions"><button class="icon-btn" data-act="reset" title="Выдать временный пароль">${icon('key', 'i-sm')}</button>
-        ${self ? '' : `<button class="icon-btn danger" data-act="delete" title="Удалить">${icon('trash', 'i-sm')}</button>`}</td></tr>`;
+      <td class="actions"><button class="icon-btn" data-act="reset" title="${t("Выдать временный пароль")}">${icon('key', 'i-sm')}</button>
+        ${self ? '' : `<button class="icon-btn danger" data-act="delete" title="${t("Удалить")}">${icon('trash', 'i-sm')}</button>`}</td></tr>`;
   }).join('');
-  el.innerHTML = `<div class="page-head"><h1>Пользователи</h1>
-      <button class="btn btn-primary" data-act="add">${icon('plus')} Добавить пользователя</button></div>
-    <div class="card table-wrap"><table><thead><tr><th>Логин</th><th>Роль</th><th>Статус</th><th>Последний вход</th><th class="col-actions">Действия</th></tr></thead>
+  el.innerHTML = `<div class="page-head"><h1>${t("Пользователи")}</h1>
+      <button class="btn btn-primary" data-act="add">${icon('plus')} ${t("Добавить пользователя")}</button></div>
+    <div class="card table-wrap"><table><thead><tr><th>${t("Логин")}</th><th>${t("Роль")}</th><th>${t("Статус")}</th><th>${t("Последний вход")}</th><th class="col-actions">${t("Действия")}</th></tr></thead>
     <tbody class="static">${rows}</tbody></table></div>
-    <p class="hint">Администратор управляет устройствами, настройками и пользователями, создаёт, удаляет и восстанавливает бэкапы. Просмотр — только список, просмотр и скачивание бэкапов.</p>`;
+    <p class="hint">${t("Администратор управляет устройствами, настройками и пользователями, создаёт, удаляет и восстанавливает бэкапы. Просмотр — только список, просмотр и скачивание бэкапов.")}</p>`;
   el.onchange = async (e) => {
     if (e.target.dataset.act !== 'role') return;
     const id = e.target.closest('tr').dataset.id;
-    try { await api(`/api/users/${id}`, { method: 'PUT', body: { role: e.target.value } }); toast('Роль изменена'); }
+    try { await api(`/api/users/${id}`, { method: 'PUT', body: { role: e.target.value } }); toast(t('Роль изменена')); }
     catch (ex) { toast(ex.message, true); loadUsers(); }
   };
   el.onclick = (e) => {
@@ -914,50 +919,50 @@ async function loadUsers() {
 }
 
 function tempPasswordField() {
-  return `<label>Временный пароль
+  return `<label>${t("Временный пароль")}
     <span class="row gap"><input class="input mono grow1" name="password" value="${genPassword()}" minlength="10" required>
-    <button type="button" class="btn btn-sm" data-act="gen">Другой</button></span>
-    <span class="hint">Передайте пользователю. При первом входе он придумает свой пароль.</span></label>`;
+    <button type="button" class="btn btn-sm" data-act="gen">${t("Другой")}</button></span>
+    <span class="hint">${t("Передайте пользователю. При первом входе он придумает свой пароль.")}</span></label>`;
 }
 
 function userForm() {
-  openModal({ title: '<h3>Новый пользователь</h3>', narrow: true, body: `
+  openModal({ title: `<h3>${t("Новый пользователь")}</h3>`, narrow: true, body: `
     <form class="stack" id="user-form" autocomplete="off">
-      <label>Логин <input class="input" name="username" required pattern="[A-Za-z0-9._@\\-]{2,64}"></label>
-      <label>Роль <select class="input" name="role"><option value="viewer">просмотр</option><option value="admin">администратор</option></select></label>
+      <label>${t("Логин")} <input class="input" name="username" required pattern="[A-Za-z0-9._@\\-]{2,64}"></label>
+      <label>${t("Роль")} <select class="input" name="role"><option value="viewer">${t("просмотр")}</option><option value="admin">${t("администратор")}</option></select></label>
       ${tempPasswordField()}
       <div class="alert alert-error hidden" id="user-error"></div>
-      <div class="row gap dialog-actions"><button type="button" class="btn" data-act="modal-close">Отмена</button><button class="btn btn-primary">Создать</button></div>
+      <div class="row gap dialog-actions"><button type="button" class="btn" data-act="modal-close">${t("Отмена")}</button><button class="btn btn-primary">${t("Создать")}</button></div>
     </form>` });
   state.modalHandler = (act) => { if (act === 'gen') $('user-form').password.value = genPassword(); };
   $('user-form').onsubmit = async (e) => {
     e.preventDefault();
-    try { await api('/api/users', { method: 'POST', body: formValues(e.target) }); closeModal(); toast('Пользователь создан'); loadUsers(); }
+    try { await api('/api/users', { method: 'POST', body: formValues(e.target) }); closeModal(); toast(t('Пользователь создан')); loadUsers(); }
     catch (ex) { $('user-error').textContent = ex.message; $('user-error').classList.remove('hidden'); }
   };
 }
 
 function userReset(user) {
-  openModal({ title: `<h3>Временный пароль для ${esc(user.username)}</h3>`, narrow: true, body: `
+  openModal({ title: `<h3>${t("Временный пароль для")} ${esc(user.username)}</h3>`, narrow: true, body: `
     <form class="stack" id="reset-form">${tempPasswordField()}
-      <p class="hint">Текущие сессии пользователя будут завершены.</p>
+      <p class="hint">${t("Текущие сессии пользователя будут завершены.")}</p>
       <div class="alert alert-error hidden" id="reset-error"></div>
-      <div class="row gap dialog-actions"><button type="button" class="btn" data-act="modal-close">Отмена</button><button class="btn btn-primary">Выдать</button></div>
+      <div class="row gap dialog-actions"><button type="button" class="btn" data-act="modal-close">${t("Отмена")}</button><button class="btn btn-primary">${t("Выдать")}</button></div>
     </form>` });
   state.modalHandler = (act) => { if (act === 'gen') $('reset-form').password.value = genPassword(); };
   $('reset-form').onsubmit = async (e) => {
     e.preventDefault();
-    try { await api(`/api/users/${user.id}/reset`, { method: 'POST', body: formValues(e.target) }); closeModal(); toast('Временный пароль выдан'); loadUsers(); }
+    try { await api(`/api/users/${user.id}/reset`, { method: 'POST', body: formValues(e.target) }); closeModal(); toast(t('Временный пароль выдан')); loadUsers(); }
     catch (ex) { $('reset-error').textContent = ex.message; $('reset-error').classList.remove('hidden'); }
   };
 }
 
 function userDelete(user) {
-  openModal({ title: `<h3>Удалить ${esc(user.username)}?</h3>`, narrow: true, body: `
-    <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">Отмена</button><button class="btn btn-danger" data-act="yes">Удалить</button></div>` });
+  openModal({ title: `<h3>${t("Удалить")} ${esc(user.username)}?</h3>`, narrow: true, body: `
+    <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">${t("Отмена")}</button><button class="btn btn-danger" data-act="yes">${t("Удалить")}</button></div>` });
   state.modalHandler = async (act) => {
     if (act !== 'yes') return;
-    try { await api(`/api/users/${user.id}`, { method: 'DELETE' }); closeModal(); toast('Пользователь удалён'); loadUsers(); }
+    try { await api(`/api/users/${user.id}`, { method: 'DELETE' }); closeModal(); toast(t('Пользователь удалён')); loadUsers(); }
     catch (e) { toast(e.message, true); }
   };
 }
@@ -965,20 +970,20 @@ function userDelete(user) {
 /* ================================================================== аудит */
 
 const AUDIT_LABEL = {
-  login: 'вход', login_failed: 'неудачный вход', password_set: 'пароль задан', password_changed: 'смена пароля',
-  settings_update: 'настройки', device_create: 'устройство добавлено', device_update: 'устройство изменено',
-  device_delete: 'устройство удалено', user_create: 'пользователь создан', user_role: 'смена роли',
-  user_reset_password: 'временный пароль', user_delete: 'пользователь удалён', backup_manual: 'ручной бэкап',
-  backup_delete: 'бэкап удалён', backup_bulk_delete: 'удаление бэкапов', backup_restore: 'восстановление',
-  backup_download: 'скачивание', run_all: 'запуск всех', import_config: 'импорт конфигурации',
+  login: t('вход'), login_failed: t('неудачный вход'), password_set: t('пароль задан'), password_changed: t('смена пароля'),
+  settings_update: t('настройки'), device_create: t('устройство добавлено'), device_update: t('устройство изменено'),
+  device_delete: t('устройство удалено'), user_create: t('пользователь создан'), user_role: t('смена роли'),
+  user_reset_password: t('временный пароль'), user_delete: t('пользователь удалён'), backup_manual: t('ручной бэкап'),
+  backup_delete: t('бэкап удалён'), backup_bulk_delete: t('удаление бэкапов'), backup_restore: t('восстановление'),
+  backup_download: t('скачивание'), run_all: t('запуск всех'), import_config: t('импорт конфигурации'),
 };
 
 async function loadAudit() {
   const el = $('page-audit');
   let list;
   try { list = await api('/api/audit?limit=300'); } catch (e) { el.innerHTML = errorBody(e.message); return; }
-  el.innerHTML = `<div class="page-head"><h1>Аудит</h1><span class="muted small">последние 300 событий</span></div>
-    <div class="card table-wrap"><table><thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Подробности</th></tr></thead>
+  el.innerHTML = `<div class="page-head"><h1>${t("Аудит")}</h1><span class="muted small">${t("последние 300 событий")}</span></div>
+    <div class="card table-wrap"><table><thead><tr><th>${t("Время")}</th><th>${t("Пользователь")}</th><th>${t("Действие")}</th><th>${t("Подробности")}</th></tr></thead>
     <tbody class="static">${list.map((a) => `<tr><td class="date">${fmtDate(a.ts)}</td><td>${esc(a.user || '—')}</td>
       <td><span class="badge ${a.action.includes('failed') ? 'bad' : ''}">${esc(AUDIT_LABEL[a.action] || a.action)}</span></td>
       <td class="small">${esc(a.details)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -1004,22 +1009,12 @@ function bindGlobal() {
   });
   $('modal-close').onclick = closeModal;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
-  $('theme-btn').onclick = () => {
-    const dark = document.documentElement.dataset.theme !== 'dark';
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    try { localStorage.setItem('mtbk-theme', dark ? 'dark' : 'light'); } catch { /* приватный режим */ }
-  };
+  for (const b of document.querySelectorAll('[data-act=theme]')) b.onclick = cycleTheme;
+  for (const b of document.querySelectorAll('[data-act=lang]')) b.onclick = () => setLang(LANG === 'ru' ? 'en' : 'ru');
   window.addEventListener('hashchange', () => state.me && route());
 }
 
-(function initTheme() {
-  let t = null;
-  try { t = localStorage.getItem('mtbk-theme'); } catch { /* ignore */ }
-  if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  document.documentElement.dataset.theme = t;
-})();
-
 document.addEventListener('DOMContentLoaded', () => {
-  bindGlobal(); bindBackups();
+  translateStatic(); updateThemeButtons(); bindGlobal(); bindBackups();
   start();
 });

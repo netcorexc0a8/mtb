@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from . import __version__, auth, config
 from .catalog import MAX_CONTENT, Catalog
 from .config import ConfigError
+from .i18n import translate
 from .mikrotik import FAILURE_RE, check_device, fetch_fingerprint, restore_config
 from .notify import telegram_send
 from .probe import format_report, probe_device
@@ -37,7 +38,8 @@ from .runner import RUN_LOCK, run_once
 log = logging.getLogger("mtb.web")
 
 STATIC_DIR = Path(__file__).with_name("web")
-STATIC = {"/": "index.html", "/app.js": "app.js", "/app.css": "app.css", "/favicon.svg": "favicon.svg"}
+STATIC = {"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css",
+          "/favicon.svg": "favicon.svg"}
 COOKIE = "mtbk_session"
 BULK_LIMIT = 200
 MAX_BODY = 1024 * 1024
@@ -86,6 +88,13 @@ class Request:
     @property
     def ip(self) -> str:
         return self.h.client_address[0]
+
+    @property
+    def lang(self) -> str:
+        return self.h.lang()
+
+    def tr(self, value):
+        return translate(value, self.lang)
 
 
 class WebApp:
@@ -233,7 +242,7 @@ class WebApp:
         self.audit(req, "backup_manual", f"{device}: {'ok' if res.success else 'ошибка'}")
         if not res.success:
             raise ApiError(502, res.failed.get(device) or "; ".join(res.failed.values()))
-        return {"ok": True, "changed": res.changed.get(device, []), "warnings": res.warnings}
+        return {"ok": True, "changed": res.changed.get(device, []), "warnings": req.tr(res.warnings)}
 
     @route("POST", "/api/backups/bulk-delete/preview", role="admin")
     def bulk_preview(self, req: Request):
@@ -264,7 +273,7 @@ class WebApp:
                 except Exception as exc:  # noqa: BLE001
                     failures.append({"id": token, "error": str(exc)})
         self.audit(req, "backup_bulk_delete", f"удалено {deleted}, ошибок {len(failures)}")
-        return {"deleted": deleted, "failures": failures}
+        return {"deleted": deleted, "failures": req.tr(failures)}
 
     @route("GET", "/api/backups/(?P<id>[A-Za-z0-9_-]+)/content")
     def backup_content(self, req: Request, id):
@@ -324,7 +333,7 @@ class WebApp:
     @route("GET", "/api/devices")
     def devices_list(self, req: Request):
         last = self._last_results()
-        return [{**config.device_public(d), "last": last.get(d.name)}
+        return [{**config.device_public(d), "last": req.tr(last.get(d.name))}
                 for d in config.load_devices(self.db, self.box)]
 
     def _last_results(self) -> dict:
@@ -385,7 +394,8 @@ class WebApp:
         try:
             info = check_device(dev, s.data_dir / "known_hosts")
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            return {"ok": False, "error": req.tr(f"{type(exc).__name__}: {exc}")}
+        info["files"] = req.tr(info["files"])
         return {"ok": not info["missing_policies"], **info}
 
     @route("POST", "/api/devices/(?P<id>\\d+)/probe", role="admin")
@@ -393,7 +403,7 @@ class WebApp:
         dev, s = self._device(id)
         with RUN_LOCK:
             rep = probe_device(dev, s.data_dir / "known_hosts", use_sftp=bool(req.body.get("sftp", True)))
-        return {"ok": not rep.error, "report": format_report(rep), "recommendation": rep.recommendation}
+        return {"ok": not rep.error, "report": req.tr(format_report(rep)), "recommendation": rep.recommendation}
 
     @route("POST", "/api/devices/(?P<id>\\d+)/backup", role="admin")
     def device_backup(self, req: Request, id):
@@ -442,7 +452,8 @@ class WebApp:
         if not (s.tg_token and s.tg_chat):
             raise ApiError(400, "Сначала сохраните токен бота и chat_id")
         try:
-            telegram_send(s.tg_token, s.tg_chat, f"✅ mtb: проверка уведомлений ({req.username})")
+            telegram_send(s.tg_token, s.tg_chat,
+                          translate(f"✅ mtb: проверка уведомлений ({req.username})", s.notify_lang))
         except Exception as exc:  # noqa: BLE001
             raise ApiError(502, str(exc)) from exc
         return {"ok": True}
@@ -534,8 +545,8 @@ class WebApp:
         return {"running": RUN_LOCK.locked(), "runs": [
             {"id": r["id"], "started_at": r["started_at"], "finished_at": r["finished_at"],
              "kind": r["kind"], "user": r["user"], "devices": json.loads(r["devices"]),
-             "ok": json.loads(r["ok"]), "failed": json.loads(r["failed"]),
-             "changed": json.loads(r["changed"]), "warnings": json.loads(r["warnings"])} for r in rows]}
+             "ok": json.loads(r["ok"]), "failed": req.tr(json.loads(r["failed"])),
+             "changed": json.loads(r["changed"]), "warnings": req.tr(json.loads(r["warnings"]))} for r in rows]}
 
     @route("POST", "/api/runs", role="admin")
     def runs_start(self, req: Request):
@@ -551,7 +562,8 @@ class WebApp:
     @route("GET", "/api/audit", role="admin")
     def audit_list(self, req: Request):
         limit = min(int(req.query.get("limit", 200)), 1000)
-        return [dict(r) for r in self.db.query("SELECT * FROM audit ORDER BY ts DESC LIMIT ?", (limit,))]
+        return [{**dict(r), "details": req.tr(r["details"])}
+                for r in self.db.query("SELECT * FROM audit ORDER BY ts DESC LIMIT ?", (limit,))]
 
     # ================================================================ сервер
 
@@ -617,6 +629,14 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, data, "application/octet-stream", {
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
             "Cache-Control": "no-store"})
+
+    def lang(self) -> str:
+        """Язык ответа: заголовок X-Lang от интерфейса, иначе Accept-Language."""
+        lang = (self.headers.get("X-Lang") or "").lower()
+        if lang in ("ru", "en"):
+            return lang
+        accept = (self.headers.get("Accept-Language") or "").lower()
+        return "ru" if not accept or accept.startswith("ru") else "en"
 
     def cookie_token(self) -> str | None:
         c = SimpleCookie()
@@ -689,15 +709,18 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             raise KeyError("Не найдено")
         except ApiError as exc:
-            self.send_json({"error": str(exc)}, exc.status)
+            self._error(str(exc), exc.status)
         except ConfigError as exc:
-            self.send_json({"error": str(exc)}, 400)
+            self._error(str(exc), 400)
         except KeyError as exc:
-            self.send_json({"error": str(exc.args[0]) if exc.args else "Не найдено"}, 404)
+            self._error(str(exc.args[0]) if exc.args else "Не найдено", 404)
         except PermissionError as exc:
-            self.send_json({"error": str(exc)}, 403)
+            self._error(str(exc), 403)
         except ValueError as exc:
-            self.send_json({"error": str(exc)}, 400)
+            self._error(str(exc), 400)
         except Exception as exc:  # noqa: BLE001
             log.exception("Ошибка обработки %s %s", method, path)
-            self.send_json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+            self._error(f"{type(exc).__name__}: {exc}", 500)
+
+    def _error(self, message: str, status: int) -> None:
+        self.send_json({"error": translate(message, self.lang())}, status)

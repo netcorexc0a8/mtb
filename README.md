@@ -2,7 +2,7 @@
 
 **English** | [Русский](README.ru.md)
 
-> 📖 **The primary, most detailed documentation is in Russian: [README.ru.md](README.ru.md).** This English version covers the same content. The web interface is in Russian.
+> 📖 **The primary, most detailed documentation is in Russian: [README.ru.md](README.ru.md).** This English version covers the same content.
 
 A service for daily backups of MikroTik RouterOS 7 devices, with a web interface. Each run collects:
 
@@ -14,7 +14,7 @@ Everything is configured in the browser: devices, schedule, storage, Gitea, Tele
 
 It ships as a single binary on GitHub Releases (Linux amd64/arm64, Windows) and as a Docker image. No Python, no external database and no CDN are needed, so it also works in air-gapped networks.
 
-![Backups](docs/web-backups.png)
+![Devices](docs/en/web-devices.png)
 
 ## Features
 
@@ -28,6 +28,7 @@ It ships as a single binary on GitHub Releases (Linux amd64/arm64, Windows) and 
   - devices, with access and transport checks;
   - run history, settings, users with roles, audit log.
 - **First login:** an `admin` user is created, and you choose its password on the first login.
+- **English and Russian interface**, with a light, dark or system theme.
 - **Telegram notifications** on errors and changes.
 
 ## Contents
@@ -71,11 +72,11 @@ curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.
 Then:
 
 1. Open `http://<server>:8080`. The first-login form appears right away: the login is `admin`; choose a password and confirm it.
-2. **Устройства → Добавить устройство** (Devices → Add device): enter the address, RouterOS user, password and transport. For API-SSL, click "Получить с устройства" (Fetch from device) to fill in the certificate fingerprint.
-3. **Настройки → Хранение** (Settings → Storage): set the backup encryption passphrase.
-4. **Журнал → Запустить сейчас** (Runs → Run now), or wait for the schedule (daily at 03:00 by default).
+2. **Devices → Add device:** enter the address, RouterOS user, password and transport. For API-SSL, click "Fetch from device" to fill in the certificate fingerprint.
+3. **Settings → Storage:** set the backup encryption passphrase.
+4. **Runs → Run now**, or wait for the schedule (daily at 03:00 by default).
 
-![First login](docs/web-first-run.png)
+![First login](docs/en/web-first-run.png)
 
 > ⚠️ Until the `admin` password is set, whoever opens the page first can set it. Do it immediately after installing. If the service is reachable from outside, do the first login through an SSH tunnel: `ssh -L 8080:127.0.0.1:8080 server`.
 
@@ -148,7 +149,7 @@ In the examples, `10.10.10.5` is the mtb server.
 /user add name=backup group=backup address=10.10.10.5/32 password="<password>"
 ```
 
-The minimal set of policies depends on the mode, and the device's "Проверить доступ" (Check access) button shows what is missing. For example, "SSH only" + "config only" needs just `read,sensitive,ssh`.
+The minimal set of policies depends on the mode, and the device's "Check access" button shows what is missing. For example, "SSH only" + "config only" needs just `read,sensitive,ssh`.
 
 | Policy | Why it is needed |
 |---|---|
@@ -157,7 +158,7 @@ The minimal set of policies depends on the mode, and the device's "Провер�
 | `policy`, `test` | `system backup save` and certificates. |
 | `api` / `ssh` | Connecting with the chosen transport. |
 
-**4. Certificate fingerprint.** The "Получить с устройства" button in the device form fills it in. Compare it with `/certificate print detail` on the router to rule out interception.
+**4. Certificate fingerprint.** The "Fetch from device" button in the device form fills it in. Compare it with `/certificate print detail` on the router to rule out interception.
 
 ## Installation
 
@@ -223,22 +224,27 @@ docker run -d --name mtb --restart unless-stopped --init --user "$(id -u):$(id -
 
 ## Web interface
 
-The UI is in Russian; English section names are given in parentheses.
+**Language and theme.** Buttons in the header and on the login page:
+
+- **RU / EN** switches the interface language. Server messages (errors, run history, check results) come in the chosen language too.
+- **The theme** cycles through system → light → dark.
+
+The choice is remembered in the browser. With no saved choice, the language follows the browser settings and the theme follows the system.
 
 | Section | Contents | Who can use it |
 |---|---|---|
-| **Бэкапы** (Backups) | Filtered list, preview, comparing two copies, downloading any file of a backup, manual backup, delete, restore. | Everyone: view and download. Admins: everything else. |
-| **Устройства** (Devices) | List with the last backup status. Add and edit, check access, check transports (`probe`), back up now. | Everyone: list. Admins: changes. |
-| **Журнал** (Runs) | Run history: successes, changes, per-device errors. "Run now" button. | Everyone. |
-| **Настройки** (Settings) | Schedule, storage and encryption, Gitea, Telegram, restore from the UI. | Admins. |
-| **Пользователи** (Users) | Admin and view-only roles, temporary passwords. | Admins. |
-| **Аудит** (Audit) | Logins, settings and device changes, downloads, deletions, restores. | Admins. |
+| **Backups** | Filtered list, preview, comparing two copies, downloading any file of a backup, manual backup, delete, restore. | Everyone: view and download. Admins: everything else. |
+| **Devices** | List with the last backup status. Add and edit, check access, check transports (`probe`), back up now. | Everyone: list. Admins: changes. |
+| **Runs** | Run history: successes, changes, per-device errors. "Run now" button. | Everyone. |
+| **Settings** | Schedule, storage and encryption, Gitea, Telegram, restore from the UI. | Admins. |
+| **Users** | Admin and view-only roles, temporary passwords. | Admins. |
+| **Audit** | Logins, settings and device changes, downloads, deletions, restores. | Admins. |
 
-![Devices](docs/web-devices.png)
+![Run history](docs/en/web-runs.png)
 
-**Comparing backups.** Select exactly two and click "Сравнить" (Compare). The diff always reads from older to newer. By default only changes with context are shown; "Весь файл" (Whole file) expands the rest.
+**Comparing backups.** Select exactly two and click "Compare". The diff always reads from older to newer. By default only changes with context are shown; "Whole file" expands the rest.
 
-![Compare](docs/web-diff.png)
+![Compare](docs/en/web-diff.png)
 
 **Users and passwords:**
 
@@ -250,7 +256,7 @@ The UI is in Russian; English section names are given in parentheses.
 
 ## Device settings
 
-Set in the form under **Устройства → Добавить / Изменить** (Devices → Add / Edit).
+Set in the form under **Devices → Add / Edit**.
 
 | Field | Default | Description |
 |---|---|---|
@@ -269,14 +275,14 @@ Set in the form under **Устройства → Добавить / Измени
 
 ## General settings
 
-The **Настройки** (Settings) section, admins only.
+The **Settings** section, admins only.
 
 | Group | Parameters |
 |---|---|
 | Schedule | Cron expression (default `0 3 * * *`), time zone, how many devices to poll in parallel. Shows the next run time. |
 | Storage and encryption | Passphrase for `.backup` and certificates. Mode: git or snapshots. For git: whether to keep history. For snapshots: retention, minimum kept, "only on changes". |
 | Gitea | Repository URL, user, token, branch, commit author, CA in PEM, disabling TLS verification. |
-| Telegram | Bot token, `chat_id`, "send a test message" button. |
+| Telegram | Bot token, `chat_id`, notification language (English or Russian), "send a test message" button. |
 | Web interface | Allow restore (`/import`) from the backup list. Off by default. |
 
 Secrets (the passphrase and tokens) are never sent back to the UI; you only see "set" or "not set". Leaving the field empty on save keeps the current value, and the "delete" checkbox clears it.
@@ -313,7 +319,7 @@ In "API only" mode, binary files need a workaround because the API works with st
 - **`raw`**: raw bytes over a `latin-1` connection;
 - **"don't fetch"**: no `.backup`, and certificates are exported as PEM.
 
-The **"Проверить транспорты"** (Check transports) button in the device form, the same as `mtb probe`, shows what works on a given router. It creates temporary files, reads them with every method, compares against an SFTP reference and suggests settings.
+The **"Check transports"** button in the device form, the same as `mtb probe`, shows what works on a given router. It creates temporary files, reads them with every method, compares against an SFTP reference and suggests settings.
 
 The simplest mode is "SSH only" + "config only": one SSH command per device, nothing created on the router, and only `read,sensitive,ssh` policies needed.
 
@@ -331,7 +337,7 @@ The simplest mode is "SSH only" + "config only": one SSH command per device, not
 
 1. Create a private repository and a user with write access.
 2. Create a token for that user under *Settings → Applications → Access Tokens* with the `write:repository` scope.
-3. Enter the URL, user and token under **Настройки → Gitea**.
+3. Enter the URL, user and token under **Settings → Gitea**.
 
 How push works:
 
@@ -408,7 +414,7 @@ All files are encrypted with the backup passphrase. Upload a file to the router 
 5. Run `/import file-name=config.rsc`.
 6. Set the `/user` passwords again.
 
-If restore is enabled in the settings, the "Восстановить" (Restore) button in the backup list uploads the `.rsc` over SSH and runs `/import`, showing the output in a dialog. `/import` applies the script on top of the current config, so this button is meant for a reset device or partial scripts.
+If restore is enabled in the settings, the "Restore" button in the backup list uploads the `.rsc` over SSH and runs `/import`, showing the output in a dialog. `/import` applies the script on top of the current config, so this button is meant for a reset device or partial scripts.
 
 ## Security
 
@@ -447,13 +453,13 @@ The database schema is migrated automatically on start.
 |---|---|
 | Lost the `admin` password | `mtb reset-password admin` with the same `DATA_DIR`. On the next login you will be asked to set a new one. |
 | The login form reappears right after logging in | The UI is opened over HTTP while `WEB_COOKIE_SECURE=true`. Use HTTPS or remove the variable. |
-| "Слишком много попыток" (too many attempts) | 10 failed logins in 15 minutes. Wait, or restart the service. |
-| `не удалось расшифровать секрет` (cannot decrypt secret) | The database was copied without its `secret.key`. Restore the key or re-enter the passwords. |
-| `FingerprintMismatch` | The API-SSL certificate was reissued. Click "Получить с устройства" and verify the fingerprint. |
+| "Too many attempts" | 10 failed logins in 15 minutes. Wait, or restart the service. |
+| `не удалось расшифровать секрет` in the server log | The database was copied without its `secret.key`. Restore the key or re-enter the passwords. |
+| `FingerprintMismatch` | The API-SSL certificate was reissued. Click "Fetch from device" and verify the fingerprint. |
 | `DH_KEY_TOO_SMALL`, `handshake failure` | The API-SSL key is shorter than 2048 bits. Reissue it, or enable "weak keys". |
-| Missing policies | "Проверить доступ" (Check access) shows which ones. |
+| Missing policies | "Check access" shows which ones. |
 | `BadHostKeyException` | The router's SSH key changed. If that was expected, delete its line from `DATA_DIR/known_hosts`. |
-| `Не задан пароль шифрования` (no passphrase set) | Settings → Storage and encryption. |
+| "No backup encryption passphrase set" | Settings → Storage and encryption. |
 | `UnicodeDecodeError` | Set the device encoding to Windows-1251. |
 | `Permission denied` in `./data` or `./backups` (Docker) | Set `PUID`/`PGID` to the owner of the folders. |
 | Push rejected | Someone committed to the repository manually. The service tries `pull --rebase`; if that hits a conflict, resolve it in `backups/`. |
@@ -489,7 +495,8 @@ mtb/
 │   ├── secretbox.py     # encryption of secrets in the database
 │   ├── auth.py          # users, scrypt, sessions, brute-force protection
 │   ├── web.py           # web server and API
-│   ├── web/             # index.html, app.js, app.css
+│   ├── web/             # index.html, app.js, app.css, i18n.js (English dictionary, theme)
+│   ├── i18n.py          # English translations of server messages
 │   ├── runner.py        # a single backup run + run history
 │   ├── mikrotik.py      # API-SSL, SSH, SFTP, /file/read, export, restore
 │   ├── probe.py         # transport checks

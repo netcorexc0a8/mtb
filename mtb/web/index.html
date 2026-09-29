@@ -5,13 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>mtb</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="/app.css">
+  <script src="/i18n.js"></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
   <!-- ============================== вход -->
   <div class="auth-wrap hidden" id="auth">
     <form class="card auth-card" id="auth-form" autocomplete="on">
+      <div class="auth-tools">
+        <button type="button" class="icon-btn lang-btn" data-act="lang" title="Язык / Language"></button>
+        <button type="button" class="icon-btn" data-act="theme" title="Тема"></button>
+      </div>
       <div class="brand brand-lg">
         <svg class="i i-lg accent" viewBox="0 0 24 24"><path d="M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11zM6 16h.01M10 16h.01"/></svg>
         <span>mtb</span>
@@ -50,9 +56,8 @@
         <a href="#/audit" data-page="audit" class="admin-only">Аудит</a>
       </nav>
       <div class="topbar-right">
-        <button class="icon-btn" id="theme-btn" title="Сменить тему">
-          <svg class="i" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
-        </button>
+        <button type="button" class="icon-btn lang-btn" data-act="lang" title="Язык / Language"></button>
+        <button type="button" class="icon-btn" data-act="theme" title="Тема"></button>
         <div class="menu">
           <button class="btn btn-sm" id="user-btn"></button>
           <div class="menu-list hidden" id="user-menu">

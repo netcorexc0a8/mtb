@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from . import config
 from .mikrotik import backup_device
+from .i18n import translate
 from .notify import telegram
 from .storage import make_storage
 
@@ -93,7 +94,8 @@ def _run(s, devices, kind, notes, notify) -> RunResult:
         log.exception("Ошибка подготовки хранилища")
         result.failed["storage"] = str(exc)
         if notify:
-            telegram(s.tg_token, s.tg_chat, f"❌ mtb: ошибка хранилища {s.backup_dir}: {exc}")
+            telegram(s.tg_token, s.tg_chat,
+                     translate(f"❌ mtb: ошибка хранилища {s.backup_dir}: {exc}", s.notify_lang))
         return result
 
     if not devices:
@@ -147,7 +149,7 @@ def _run(s, devices, kind, notes, notify) -> RunResult:
 
     # Уведомляем при ошибках или изменениях; «всё без изменений» — только в лог
     if notify and (result.failed or result.warnings or result.changed):
-        telegram(s.tg_token, s.tg_chat, text)
+        telegram(s.tg_token, s.tg_chat, translate(text, s.notify_lang))
 
     if not result.failed and not manual:
         (s.data_dir / "last_success").write_text(datetime.now(tz).isoformat())
