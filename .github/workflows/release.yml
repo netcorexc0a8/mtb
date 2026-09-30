@@ -29,7 +29,13 @@ jobs:
           apt-get update && apt-get install -y --no-install-recommends binutils
 
       - name: Set version
-        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > mtb/_version.py
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          IN_REPO=$(sed -E 's/.*"(.*)".*/\1/' mtb/_version.py)
+          if [ "$IN_REPO" != "$V" ]; then
+            echo "::warning::mtb/_version.py = $IN_REPO, тег = $V. Выпускайте релизы через scripts/release.sh"
+          fi
+          echo "__version__ = \"$V\"" > mtb/_version.py
 
       - name: Build
         run: |
