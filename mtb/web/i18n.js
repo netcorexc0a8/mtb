@@ -164,6 +164,20 @@ const EN = {
   'Сервис не вернулся с новой версией. Проверьте journalctl -u mtb.': 'The service did not come back with the new version. Check journalctl -u mtb.',
   'обновление': 'update', 'ошибка обновления': 'update failed',
 
+  // ---- удаление git-бэкапов, переименование
+  'Коммит останется в истории git и в Gitea': 'The commit stays in git history and in Gitea',
+  'Убрать из списка?': 'Remove from list?', 'Убрать из списка (коммит останется в истории git)': 'Remove from list (the commit stays in git history)',
+  'бэкапы из истории git будут убраны из списка, коммиты останутся': 'backups from git history will be removed from the list; the commits remain',
+  'Будет убрано из списка': 'This will remove from the list',
+  'Коммиты останутся в истории git и в Gitea: git не удаляет историю.': 'The commits stay in git history and in Gitea: git does not delete history.',
+  'Бэкап убран из списка': 'Backup removed from the list', 'бэкап убран из списка': 'backup removed from list',
+  'устройство переименовано': 'device renamed', 'ошибка переименования': 'rename failed',
+
+  'Прежние имена': 'Former names',
+  'Бэкапы и журнал под этими именами показываются у этого устройства. При переименовании старое имя добавляется сюда само.':
+    "Backups and run history under these names are shown for this device. On rename, the old name is added here automatically.",
+  'прежние имена': 'former names',
+
   // ---- пользователи
   'пароль не задан': 'no password', 'временный пароль': 'temporary password', 'активен': 'active', '(вы)': '(you)',
   'администратор': 'administrator', 'просмотр': 'viewer', 'Выдать временный пароль': 'Issue a temporary password',
@@ -195,10 +209,10 @@ function writePref(key, value) {
   try { localStorage.setItem(key, value); } catch { /* приватный режим */ }
 }
 
+// Язык по умолчанию — английский. После входа берётся язык из профиля пользователя.
 const LANG = (() => {
   const saved = readPref('mtb-lang');
-  if (saved === 'ru' || saved === 'en') return saved;
-  return (navigator.language || 'ru').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+  return saved === 'ru' || saved === 'en' ? saved : 'en';
 })();
 const LOCALE = LANG === 'en' ? 'en-GB' : 'ru-RU';
 document.documentElement.lang = LANG;

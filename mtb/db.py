@@ -86,6 +86,22 @@ SCHEMA = [
     CREATE INDEX runs_started ON runs(started_at);
     CREATE INDEX audit_ts ON audit(ts);
     """,
+    # v2: язык пользователя, прежние имена устройств, скрытые git-бэкапы
+    """
+    ALTER TABLE users ADD COLUMN lang TEXT;
+    CREATE TABLE device_aliases (
+        name       TEXT PRIMARY KEY,
+        device_id  INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+        created_at REAL NOT NULL
+    );
+    CREATE TABLE hidden_backups (
+        ref       TEXT NOT NULL,
+        dir       TEXT NOT NULL,
+        hidden_at REAL NOT NULL,
+        user      TEXT,
+        PRIMARY KEY (ref, dir)
+    );
+    """,
 ]
 
 

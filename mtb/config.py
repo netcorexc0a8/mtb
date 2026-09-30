@@ -163,12 +163,40 @@ def device_from_row(row, box: SecretBox) -> Device:
     )
 
 
-def device_public(dev: Device) -> dict:
+def device_public(dev: Device, db: Database | None = None) -> dict:
     """Для API: всё, кроме пароля."""
     d = {k: getattr(dev, k) for k in DEVICE_FIELDS}
     d["id"] = dev.id
     d["password_set"] = bool(dev.password)
+    if db is not None and dev.id is not None:
+        d["aliases"] = [r["name"] for r in db.query(
+            "SELECT name FROM device_aliases WHERE device_id=? ORDER BY name", (dev.id,))]
     return d
+
+
+def set_aliases(db: Database, device_id: int, names) -> list[str]:
+    """Прежние имена устройства: бэкапы и журнал под ними показываются у этого устройства."""
+    if isinstance(names, str):
+        names = names.replace(",", "\n").splitlines()
+    clean = sorted({str(n).strip() for n in names if str(n).strip()})
+    me = db.one("SELECT name FROM devices WHERE id=?", (device_id,))
+    for n in clean:
+        if not NAME_RE.match(n):
+            raise ConfigError(f"Прежнее имя {n}: латиница, цифры, . _ -")
+        if me and n == me["name"]:
+            raise ConfigError(f"{n} — текущее имя устройства")
+        if db.one("SELECT 1 FROM devices WHERE name=?", (n,)):
+            raise ConfigError(f"Устройство {n} существует — его имя нельзя сделать прежним именем другого")
+        other = db.one("SELECT d.name FROM device_aliases a JOIN devices d ON d.id=a.device_id "
+                       "WHERE a.name=? AND a.device_id<>?", (n, device_id))
+        if other:
+            raise ConfigError(f"{n} уже указано как прежнее имя устройства {other['name']}")
+    now = time.time()
+    with db.tx() as c:
+        c.execute("DELETE FROM device_aliases WHERE device_id=?", (device_id,))
+        for n in clean:
+            c.execute("INSERT INTO device_aliases(name, device_id, created_at) VALUES(?,?,?)", (n, device_id, now))
+    return clean
 
 
 def save_device(db: Database, box: SecretBox, data: dict, device_id: int | None = None) -> Device:
@@ -208,8 +236,17 @@ def save_device(db: Database, box: SecretBox, data: dict, device_id: int | None 
                 cert_format=dev.cert_format, certs=json.dumps(dev.certs), tls_fingerprint=dev.tls_fingerprint,
                 tls_ca_pem=dev.tls_ca, tls_insecure=int(dev.tls_insecure), tls_legacy=int(dev.tls_legacy),
                 updated_at=now)
+    alias_owner = db.one("SELECT device_id FROM device_aliases WHERE name=?", (dev.name,))
+    if alias_owner and alias_owner["device_id"] != device_id:
+        owner = db.one("SELECT name FROM devices WHERE id=?", (alias_owner["device_id"],))
+        raise ConfigError(f"Имя {dev.name} раньше было у устройства {owner['name'] if owner else '?'}: "
+                          f"его бэкапы хранятся под этим именем")
     try:
         with db.tx() as c:
+            if current is not None and current.name != dev.name:
+                c.execute("INSERT OR REPLACE INTO device_aliases(name, device_id, created_at) VALUES(?,?,?)",
+                          (current.name, device_id, now))
+                c.execute("DELETE FROM device_aliases WHERE name=? AND device_id=?", (dev.name, device_id))
             if device_id is None:
                 cols["created_at"] = now
                 cur = c.execute(f"INSERT INTO devices({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
@@ -255,7 +292,7 @@ SETTINGS_SPEC: dict[str, tuple[type, object, bool]] = {
     "telegram_token": (str, "", True),
     "telegram_chat": (str, "", False),
     "web_restore": (bool, False, False),
-    "notify_lang": (str, "ru", False),
+    "notify_lang": (str, "en", False),
     "update_check": (bool, True, False),
     "update_channel": (str, "auto", False),
 }
@@ -365,6 +402,7 @@ class Settings:
     web_tls_cert: str | None = None
     web_tls_key: str | None = None
     web_cookie_secure: bool = False
+    aliases: dict = field(default_factory=dict)     # прежнее имя устройства -> текущее
     extra: dict = field(default_factory=dict)
 
 
@@ -392,4 +430,10 @@ def load(boot: Bootstrap, db: Database, box: SecretBox) -> Settings:
         web_restore=v["web_restore"], notify_lang=v["notify_lang"], web_listen=boot.web_listen,
         web_tls_cert=boot.web_tls_cert, web_tls_key=boot.web_tls_key,
         web_cookie_secure=boot.web_cookie_secure,
+        aliases=load_aliases(db),
     )
+
+
+def load_aliases(db: Database) -> dict:
+    return {r["name"]: r["current"] for r in db.query(
+        "SELECT a.name, d.name AS current FROM device_aliases a JOIN devices d ON d.id = a.device_id")}

@@ -300,3 +300,30 @@ class SnapshotStorage:
 
     def push(self) -> bool:
         return False
+
+
+def rename_device_dir(s, old: str, new: str) -> str | None:
+    """Переносит бэкапы устройства в папку с новым именем.
+
+    git: `git mv` отдельным коммитом с трейлером Type: rename — история
+    сохраняется, старые коммиты остаются под прежним путём (веб показывает их
+    под новым именем через псевдоним). Снимки и «только текущее» — переименование
+    папки. Возвращает описание сделанного или None, если бэкапов ещё не было.
+    """
+    src, dst = s.backup_dir / old, s.backup_dir / new
+    if not src.exists():
+        return None
+    if dst.exists():
+        raise ValueError(f"Папка бэкапов {new} уже существует")
+    if s.storage == "git" and (s.backup_dir / ".git").exists() and shutil.which("git"):
+        store = GitStorage(s)
+        store._git("mv", old, new)
+        store._git("commit", "-q", "-m",
+                   f"rename {old} → {new}\n\nType: rename\nDevices: {new}\nRenamed-From: {old}")
+        try:
+            store.push()
+        except Exception as exc:  # noqa: BLE001 — догонит следующий прогон
+            log.warning("push после переименования не удался: %s", exc)
+        return "git mv"
+    src.rename(dst)
+    return "rename"

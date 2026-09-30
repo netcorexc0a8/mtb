@@ -237,7 +237,7 @@ docker run -d --name mtb --restart unless-stopped --init --user "$(id -u):$(id -
 - **RU / EN** switches the interface language. Server messages (errors, run history, check results) come in the chosen language too.
 - **The theme** cycles through system → light → dark.
 
-The choice is remembered in the browser. With no saved choice, the language follows the browser settings and the theme follows the system.
+The default language is English. The chosen language is stored in the user profile, so it is the same in any browser and at any address of the service; the login page uses the last choice made in that browser. The theme is remembered in the browser and follows the system by default.
 
 | Section | Contents | Who can use it |
 |---|---|---|
@@ -268,7 +268,8 @@ Set in the form under **Devices → Add / Edit**.
 
 | Field | Default | Description |
 |---|---|---|
-| Name | — | Unique: Latin letters, digits, `. _ -`. Also the name of the backup folder. |
+| Name | — | Unique: Latin letters, digits, `. _ -`. Also the name of the backup folder. On rename, the folder is moved (in git, as a separate `rename` commit) and the old name is added to "Former names". |
+| Former names | — | Backups and run history under these names are shown for this device. Use it if backups were left under an old name. |
 | Address, user, password | — | RouterOS access. The password is stored encrypted and never returned to the UI. |
 | Enabled in schedule | yes | Disabled devices are skipped by the schedule but can still be backed up manually. |
 | Transport | API + SFTP | API + SFTP, API-SSL only, or SSH only. See [Transport modes](#transport-modes). |
@@ -336,11 +337,13 @@ The simplest mode is "SSH only" + "config only": one SSH command per device, not
 
 **Git** (default). The folder holds the current state and the local git repository holds the history, so `git log -p` and `git diff` work directly in `backups/`. Turning off "keep history" leaves only the latest files.
 
+In git mode, the delete button in the list **removes the backup from the list**: commits are never deleted from git history and stay in Gitea. The confirmation says so.
+
 **Snapshots.** Every run creates a dated folder with a full copy of everything collected.
 
 - Snapshots older than the retention period are deleted, but the minimum number of newest snapshots is always kept, even if a router has been unreachable for a long time.
 - "Only on changes" creates a snapshot only when the config, the RouterOS version or the certificates changed.
-- Deleting backups from the UI is available only in this mode: git commits are never deleted.
+- Deleting from the UI (the button in the Actions column, or in bulk) removes the snapshot from disk in this mode.
 
 **Gitea** (git storage only):
 

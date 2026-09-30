@@ -154,6 +154,16 @@ EN: dict[str, str] = {
     "контрольная сумма не совпала — файл повреждён или подменён": "checksum mismatch — the file is corrupted or tampered with",
     "новый бинарник не запустился или сообщил версию «{}»": "the new binary failed to run or reported version \"{}\"",
     "GitHub: превышен лимит запросов, попробуйте позже": "GitHub: rate limit exceeded, try again later",
+    # ---- язык, переименование, удаление
+    "Язык — ru или en": "Language must be ru or en",
+    "Имя {} раньше было у устройства {}: его бэкапы хранятся под этим именем":
+        "The name {} was previously used by device {}: its backups are stored under that name",
+    "Папка бэкапов {} уже существует": "Backup folder {} already exists",
+    "удалено {}, скрыто {}, ошибок {}": "deleted {}, hidden {}, errors {}",
+    "Прежнее имя {}: латиница, цифры, . _ -": "Former name {}: Latin letters, digits, . _ -",
+    "{} — текущее имя устройства": "{} is the device's current name",
+    "Устройство {} существует — его имя нельзя сделать прежним именем другого": "Device {} exists — its name cannot be a former name of another device",
+    "{} уже указано как прежнее имя устройства {}": "{} is already a former name of device {}",
     # ---- проверка устройства
     "SSH ok, SFTP ok": "SSH ok, SFTP ok",
 }

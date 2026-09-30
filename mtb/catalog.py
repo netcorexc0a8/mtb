@@ -4,6 +4,14 @@
   STORAGE=git (с историей)   каждый коммит, затронувший <device>/ — бэкап этого устройства
   STORAGE=git, GIT_HISTORY=false   только текущее состояние, по одному на устройство
 
+Имя устройства — это и имя папки. После переименования старые снимки и
+коммиты лежат под прежним именем: они показываются под текущим (псевдонимы из
+базы), а читаются по фактической папке (Entry.dir).
+
+Удаление: снимки и «только текущее» удаляются с диска; коммиты git не
+удаляются — бэкап скрывается из списка (таблица hidden_backups), в истории git
+и в Gitea он остаётся.
+
 Идентификатор бэкапа — строка «вид|…», закодированная в base64url.
 """
 from __future__ import annotations
@@ -30,7 +38,7 @@ MAX_CONTENT = 2 * 1024 * 1024
 @dataclass
 class Entry:
     id: str
-    device: str
+    device: str          # текущее имя устройства
     created: datetime
     type: str
     notes: str
@@ -38,6 +46,14 @@ class Entry:
     kind: str            # snapshot | git | plain
     ref: str             # stamp | sha | ""
     deletable: bool
+    dir: str = ""        # папка на диске / в git на момент бэкапа
+
+    def __post_init__(self):
+        self.dir = self.dir or self.device
+
+    @property
+    def delete_mode(self) -> str:
+        return "hide" if self.kind == "git" else "delete"
 
     @property
     def filename(self) -> str:
@@ -47,7 +63,7 @@ class Entry:
         return {
             "id": self.id, "device": self.device, "created_at": self.created.isoformat(),
             "type": self.type, "notes": self.notes, "size": self.size,
-            "filename": self.filename, "deletable": self.deletable,
+            "filename": self.filename, "deletable": self.deletable, "delete_mode": self.delete_mode,
         }
 
 
@@ -63,11 +79,23 @@ def _dec(token: str) -> str:
 
 
 class Catalog:
-    def __init__(self, s: config.Settings):
+    def __init__(self, s: config.Settings, db=None):
         self.s = s
+        self.db = db
         self.root = s.backup_dir
         self.tz = ZoneInfo(s.timezone)
         self.encodings = {d.name: d.encoding for d in s.devices}
+        current = {d.name for d in s.devices}
+        # текущее имя важнее псевдонима: псевдоним применяется, только если такого устройства сейчас нет
+        self.aliases = {old: new for old, new in (getattr(s, "aliases", None) or {}).items() if old not in current}
+
+    def display(self, dir_name: str) -> str:
+        return self.aliases.get(dir_name, dir_name)
+
+    def _hidden(self) -> set[tuple[str, str]]:
+        if self.db is None:
+            return set()
+        return {(r["ref"], r["dir"]) for r in self.db.query("SELECT ref, dir FROM hidden_backups")}
 
     # ---------------------------------------------------------------- режим
 
@@ -79,11 +107,16 @@ class Catalog:
             return "git"
         return "plain"
 
+    def _dirs(self) -> list[str]:
+        if not self.root.is_dir():
+            return []
+        return sorted(p.name for p in self.root.iterdir()
+                      if p.is_dir() and NAME_RE.match(p.name) and not p.name.startswith("."))
+
     def devices(self) -> list[str]:
-        names = {d.name for d in self.s.devices}
-        if self.root.is_dir():
-            names |= {p.name for p in self.root.iterdir()
-                      if p.is_dir() and NAME_RE.match(p.name) and not p.name.startswith(".")}
+        names = {d.name for d in self.s.devices} | {self.display(d) for d in self._dirs()}
+        if self.mode == "git":
+            names |= {e.device for e in self._list_git()}
         return sorted(names)
 
     def decode(self, device: str, data: bytes) -> str:
@@ -116,6 +149,8 @@ class Catalog:
             devices = {n.strip().split("/", 1)[0] for n in names.splitlines() if "/" in n}
             devices |= {d for d in trailers.get("Devices", "").split(",") if d}
             kind = trailers.get("Type") or ("manual" if subject.startswith("manual") else "scheduled")
+            if kind == "rename":
+                continue
             created = datetime.fromisoformat(date).astimezone(self.tz)
             for dev in devices:
                 if NAME_RE.match(dev):
@@ -125,20 +160,23 @@ class Catalog:
         check = "".join(f"{sha}:{dev}/config.rsc\n" for sha, dev, *_ in rows).encode()
         sizes = self._git("cat-file", "--batch-check=%(objecttype) %(objectsize)", input_=check)
         out = []
+        hidden = self._hidden()
         for row, line in zip(rows, sizes.decode().splitlines()):
             parts = line.split()
             if len(parts) != 2 or parts[0] != "blob":
                 continue                                # у коммита нет config.rsc этого устройства
             sha, dev, created, kind, notes = row
-            out.append(Entry(_enc(f"g|{sha}|{dev}"), dev, created, kind, notes,
-                             int(parts[1]), "git", sha, False))
+            if (sha, dev) in hidden:
+                continue
+            out.append(Entry(_enc(f"g|{sha}|{dev}"), self.display(dev), created, kind, notes,
+                             int(parts[1]), "git", sha, True, dev))
         return out
 
     # ---------------------------------------------------------------- snapshots / plain
 
     def _list_snapshots(self) -> list[Entry]:
         out = []
-        for dev in self.devices():
+        for dev in self._dirs():
             d = self.root / dev
             if not d.is_dir():
                 continue
@@ -154,19 +192,19 @@ class Catalog:
                 except (OSError, ValueError):
                     pass
                 created = datetime.strptime(snap.name[:17], SnapshotStorage.STAMP).replace(tzinfo=self.tz)
-                out.append(Entry(_enc(f"s|{dev}|{snap.name}"), dev, created,
+                out.append(Entry(_enc(f"s|{dev}|{snap.name}"), self.display(dev), created,
                                  info.get("type", "scheduled"), info.get("notes", ""),
-                                 cfg.stat().st_size, "snapshot", snap.name, True))
+                                 cfg.stat().st_size, "snapshot", snap.name, True, dev))
         return out
 
     def _list_plain(self) -> list[Entry]:
         out = []
-        for dev in self.devices():
+        for dev in self._dirs():
             cfg = self.root / dev / "config.rsc"
             if cfg.exists():
                 created = datetime.fromtimestamp(cfg.stat().st_mtime, self.tz)
-                out.append(Entry(_enc(f"p|{dev}"), dev, created, "current", "",
-                                 cfg.stat().st_size, "plain", "", False))
+                out.append(Entry(_enc(f"p|{dev}"), self.display(dev), created, "current", "",
+                                 cfg.stat().st_size, "plain", "", True, dev))
         return out
 
     # ---------------------------------------------------------------- API
@@ -197,14 +235,14 @@ class Catalog:
 
     def files(self, e: Entry) -> list[dict]:
         if e.kind == "git":
-            raw = self._git("ls-tree", "-r", "-l", e.ref, "--", f"{e.device}/").decode(errors="replace")
+            raw = self._git("ls-tree", "-r", "-l", e.ref, "--", f"{e.dir}/").decode(errors="replace")
             out = []
             for line in raw.splitlines():
                 meta, _, path = line.partition("\t")
                 size = meta.split()[-1]
                 out.append({"path": path.split("/", 1)[1], "size": int(size) if size.isdigit() else 0})
             return sorted(out, key=lambda x: x["path"])
-        base = self.root / e.device / (e.ref if e.kind == "snapshot" else "")
+        base = self.root / e.dir / (e.ref if e.kind == "snapshot" else "")
         return sorted(({"path": p.relative_to(base).as_posix(), "size": p.stat().st_size}
                        for p in base.rglob("*") if p.is_file()), key=lambda x: x["path"])
 
@@ -212,11 +250,19 @@ class Catalog:
         if rel not in {f["path"] for f in self.files(e)}:
             raise KeyError("файл не найден")
         if e.kind == "git":
-            return self._git("show", f"{e.ref}:{e.device}/{rel}")
-        base = self.root / e.device / (e.ref if e.kind == "snapshot" else "")
+            return self._git("show", f"{e.ref}:{e.dir}/{rel}")
+        base = self.root / e.dir / (e.ref if e.kind == "snapshot" else "")
         return (base / rel).read_bytes()
 
-    def delete(self, e: Entry) -> None:
-        if not e.deletable:
-            raise PermissionError("этот бэкап нельзя удалить: он часть истории git")
-        shutil.rmtree(self.root / e.device / e.ref)
+    def delete(self, e: Entry, user: str | None = None) -> str:
+        """Возвращает 'deleted' или 'hidden'."""
+        if e.kind == "git":
+            if self.db is None:
+                raise PermissionError("этот бэкап нельзя удалить: он часть истории git")
+            import time
+            with self.db.tx() as c:
+                c.execute("INSERT OR IGNORE INTO hidden_backups(ref, dir, hidden_at, user) VALUES(?,?,?,?)",
+                          (e.ref, e.dir, time.time(), user))
+            return "hidden"
+        shutil.rmtree(self.root / e.dir / e.ref if e.kind == "snapshot" else self.root / e.dir)
+        return "deleted"

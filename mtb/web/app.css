@@ -123,7 +123,8 @@ pre.code { margin: 0; font: 12px/1.6 var(--mono); background: var(--surface-2); 
 .seg button { border: 0; background: var(--surface); color: var(--ink-3); font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer; }
 .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .plain-table td, .plain-table th { padding: 6px 10px; }
-.col-actions { width: 150px; }
+.col-actions { width: 210px; }
+.confirm .yes { white-space: nowrap; }
 .identical { text-align: center; padding: 32px; }
 .dialog-actions { margin-top: 14px; justify-content: flex-end; }
 .mt { margin-top: 10px; }

@@ -183,13 +183,23 @@ class WebApp:
     @route("GET", "/api/me")
     def me(self, req: Request):
         s = self.settings()
-        cat = Catalog(s)
+        cat = Catalog(s, self.db)
         return {"user": req.username, "role": req.user["role"], "can_write": req.user["role"] == "admin",
+                "lang": req.user["lang"],
                 "version": __version__, "timezone": s.timezone, "mode": cat.mode, "restore": s.web_restore,
                 "devices": cat.devices(), "configured": [d.name for d in s.devices],
                 "passphrase_set": bool(s.backup_passphrase),
                 "update": {k: v for k, v in updater.summary(self.db).items() if k != "latest"}
                 | {"latest_version": (updater.summary(self.db)["latest"] or {}).get("version")}}
+
+    @route("PUT", "/api/me/lang")
+    def set_own_lang(self, req: Request):
+        lang = str(req.body.get("lang", ""))
+        if lang not in ("ru", "en"):
+            raise ApiError(400, "Язык — ru или en")
+        with self.db.tx() as c:
+            c.execute("UPDATE users SET lang=? WHERE id=?", (lang, req.user["id"]))
+        return {"ok": True, "lang": lang}
 
     @route("POST", "/api/me/password")
     def change_own_password(self, req: Request):
@@ -209,7 +219,7 @@ class WebApp:
     @route("GET", "/api/backups")
     def backups_list(self, req: Request):
         q = req.query
-        cat = Catalog(self.settings())
+        cat = Catalog(self.settings(), self.db)
         device, kind = q.get("device", ""), q.get("type", "")
         search = q.get("search", "").lower().strip()
         d_from = date.fromisoformat(q["from"]) if q.get("from") else None
@@ -229,7 +239,7 @@ class WebApp:
     @route("GET", "/api/backups/types")
     def backups_types(self, req: Request):
         counts: dict[str, int] = {}
-        for e in Catalog(self.settings()).list():
+        for e in Catalog(self.settings(), self.db).list():
             counts[e.type] = counts.get(e.type, 0) + 1
         return [{"type": k, "count": v} for k, v in sorted(counts.items())]
 
@@ -250,15 +260,15 @@ class WebApp:
     @route("POST", "/api/backups/bulk-delete/preview", role="admin")
     def bulk_preview(self, req: Request):
         ids = list(req.body.get("ids", []))
-        cat = Catalog(self.settings())
+        cat = Catalog(self.settings(), self.db)
         per: dict[str, dict] = {}
         for token in ids[:BULK_LIMIT]:
             e = cat.get(token)
-            row = per.setdefault(e.device, {"device": e.device, "deletable": 0, "protected": 0})
-            row["deletable" if e.deletable else "protected"] += 1
+            row = per.setdefault(e.device, {"device": e.device, "delete": 0, "hide": 0})
+            row[e.delete_mode] += 1
         rows = sorted(per.values(), key=lambda r: r["device"])
-        return {"devices": rows, "total": sum(r["deletable"] for r in rows),
-                "protected": sum(r["protected"] for r in rows), "limit": BULK_LIMIT,
+        return {"devices": rows, "delete": sum(r["delete"] for r in rows), "hide": sum(r["hide"] for r in rows),
+                "total": sum(r["delete"] + r["hide"] for r in rows), "limit": BULK_LIMIT,
                 "over_limit": len(ids) > BULK_LIMIT}
 
     @route("POST", "/api/backups/bulk-delete", role="admin")
@@ -266,21 +276,22 @@ class WebApp:
         ids = list(req.body.get("ids", []))
         if len(ids) > BULK_LIMIT:
             raise ApiError(400, f"Не больше {BULK_LIMIT} за раз")
-        cat = Catalog(self.settings())
-        deleted, failures = 0, []
+        cat = Catalog(self.settings(), self.db)
+        done = {"deleted": 0, "hidden": 0}
+        failures = []
         with RUN_LOCK:
             for token in ids:
                 try:
-                    cat.delete(cat.get(token))
-                    deleted += 1
+                    done[cat.delete(cat.get(token), req.username)] += 1
                 except Exception as exc:  # noqa: BLE001
                     failures.append({"id": token, "error": str(exc)})
-        self.audit(req, "backup_bulk_delete", f"удалено {deleted}, ошибок {len(failures)}")
-        return {"deleted": deleted, "failures": req.tr(failures)}
+        self.audit(req, "backup_bulk_delete",
+                   f"удалено {done['deleted']}, скрыто {done['hidden']}, ошибок {len(failures)}")
+        return {**done, "failures": req.tr(failures)}
 
     @route("GET", "/api/backups/(?P<id>[A-Za-z0-9_-]+)/content")
     def backup_content(self, req: Request, id):
-        cat = Catalog(self.settings())
+        cat = Catalog(self.settings(), self.db)
         e = cat.get(id)
         data = cat.read(e)
         return {**e.public(), "content": cat.decode(e.device, data[:MAX_CONTENT]),
@@ -288,7 +299,7 @@ class WebApp:
 
     @route("GET", "/api/backups/(?P<a>[A-Za-z0-9_-]+)/diff/(?P<b>[A-Za-z0-9_-]+)")
     def backup_diff(self, req: Request, a, b):
-        cat = Catalog(self.settings())
+        cat = Catalog(self.settings(), self.db)
         ea, eb = cat.get(a), cat.get(b)
         if ea.created > eb.created:
             ea, eb = eb, ea
@@ -297,7 +308,7 @@ class WebApp:
 
     @route("GET", "/api/backups/(?P<id>[A-Za-z0-9_-]+)/download")
     def backup_download(self, req: Request, id):
-        cat = Catalog(self.settings())
+        cat = Catalog(self.settings(), self.db)
         e = cat.get(id)
         rel = req.query.get("file", "config.rsc")
         data = cat.read(e, rel)
@@ -311,7 +322,7 @@ class WebApp:
         s = self.settings()
         if not s.web_restore:
             raise ApiError(403, "Восстановление выключено (Настройки → Веб-интерфейс)")
-        cat = Catalog(s)
+        cat = Catalog(s, self.db)
         e = cat.get(id)
         dev = next((d for d in s.devices if d.name == e.device), None)
         if dev is None:
@@ -324,55 +335,101 @@ class WebApp:
 
     @route("DELETE", "/api/backups/(?P<id>[A-Za-z0-9_-]+)", role="admin")
     def backup_delete(self, req: Request, id):
-        cat = Catalog(self.settings())
+        cat = Catalog(self.settings(), self.db)
         e = cat.get(id)
         with RUN_LOCK:
-            cat.delete(e)
-        self.audit(req, "backup_delete", f"{e.device}: {e.filename}")
-        return {"ok": True}
+            result = cat.delete(e, req.username)
+        self.audit(req, "backup_delete" if result == "deleted" else "backup_hide", f"{e.device}: {e.filename}")
+        return {"ok": True, "result": result}
 
     # ================================================================ устройства
 
     @route("GET", "/api/devices")
     def devices_list(self, req: Request):
         last = self._last_results()
-        return [{**config.device_public(d), "last": req.tr(last.get(d.name))}
+        return [{**config.device_public(d, self.db), "last": req.tr(last.get(d.name))}
                 for d in config.load_devices(self.db, self.box)]
 
     def _last_results(self) -> dict:
-        """Последний результат по каждому устройству из журнала запусков."""
+        """Последний результат по каждому устройству из журнала запусков.
+
+        В журнале — имена на момент запуска; прежние имена переводятся в текущие.
+        """
+        aliases = config.load_aliases(self.db)
         out: dict[str, dict] = {}
         for r in self.db.query("SELECT * FROM runs WHERE finished_at IS NOT NULL "
-                               "ORDER BY started_at DESC LIMIT 200"):
+                               "ORDER BY started_at DESC LIMIT 500"):
             failed, ok = json.loads(r["failed"]), json.loads(r["ok"])
             for name in json.loads(r["devices"]):
-                if name in out:
+                current = aliases.get(name, name)
+                if current in out:
                     continue
                 if name in failed:
-                    out[name] = {"ok": False, "at": r["started_at"], "error": failed[name]}
+                    out[current] = {"ok": False, "at": r["started_at"], "error": failed[name]}
                 elif name in ok:
-                    out[name] = {"ok": True, "at": r["started_at"]}
+                    out[current] = {"ok": True, "at": r["started_at"]}
         return out
 
     @route("POST", "/api/devices", role="admin")
     def device_create(self, req: Request):
         dev = config.save_device(self.db, self.box, req.body)
+        if "aliases" in req.body:
+            config.set_aliases(self.db, dev.id, req.body["aliases"])
         self.audit(req, "device_create", dev.name)
-        return config.device_public(dev)
+        return config.device_public(dev, self.db)
 
     @route("GET", "/api/devices/(?P<id>\\d+)")
     def device_get(self, req: Request, id):
         row = self.db.one("SELECT * FROM devices WHERE id=?", (int(id),))
         if row is None:
             raise KeyError("устройство не найдено")
-        return config.device_public(config.device_from_row(row, self.box))
+        return config.device_public(config.device_from_row(row, self.box), self.db)
 
     @route("PUT", "/api/devices/(?P<id>\\d+)", role="admin")
     def device_update(self, req: Request, id):
-        dev = config.save_device(self.db, self.box, req.body, int(id))
-        changed = sorted(k for k in req.body if k != "password") + (["password"] if req.body.get("password") else [])
+        row = self.db.one("SELECT name FROM devices WHERE id=?", (int(id),))
+        if row is None:
+            raise KeyError("устройство не найдено")
+        old, new = row["name"], str(req.body.get("name", row["name"])).strip()
+        if new == old:
+            dev = config.save_device(self.db, self.box, req.body, int(id))
+        else:
+            from .storage import rename_device_dir
+            s = self.settings()
+            config.Device(name=new, host="x", username="x", password="x", transport="ssh")   # проверка имени
+            if (s.backup_dir / new).exists():
+                raise ApiError(400, f"Папка бэкапов {new} уже существует")
+            with RUN_LOCK:
+                moved = None
+                if s.storage != "git" or not (s.backup_dir / ".git").exists():
+                    moved = rename_device_dir(s, old, new)           # папку можно вернуть назад
+                    try:
+                        dev = config.save_device(self.db, self.box, req.body, int(id))
+                    except Exception:
+                        if moved:
+                            rename_device_dir(s, new, old)
+                        raise
+                else:
+                    dev = config.save_device(self.db, self.box, req.body, int(id))
+                    try:
+                        moved = rename_device_dir(s, old, new)       # коммит — после сохранения
+                    except Exception as exc:  # noqa: BLE001
+                        log.exception("Не удалось перенести бэкапы %s → %s", old, new)
+                        self.audit(req, "device_rename_failed", f"{old} → {new}: {exc}")
+            self.audit(req, "device_rename", f"{old} → {new}" + (f" ({moved})" if moved else ""))
+        if "aliases" in req.body:
+            before = {r["name"] for r in self.db.query("SELECT name FROM device_aliases WHERE device_id=?", (dev.id,))}
+            wanted = req.body["aliases"]
+            wanted = (wanted.replace(",", "\n").splitlines() if isinstance(wanted, str) else list(wanted or []))
+            if old != new:
+                wanted.append(old)                       # форма не знает о только что сменённом имени
+            wanted = [x for x in (w.strip() for w in wanted) if x and x != dev.name]
+            after = set(config.set_aliases(self.db, dev.id, wanted))
+            if before != after:
+                self.audit(req, "device_aliases", f"{dev.name}: {', '.join(sorted(after)) or '—'}")
+        changed = sorted(k for k in req.body if k not in ("password", "aliases")) + (["password"] if req.body.get("password") else [])
         self.audit(req, "device_update", f"{dev.name}: {', '.join(changed)}")
-        return config.device_public(dev)
+        return config.device_public(dev, self.db)
 
     @route("DELETE", "/api/devices/(?P<id>\\d+)", role="admin")
     def device_delete(self, req: Request, id):
@@ -672,10 +729,7 @@ class _Handler(BaseHTTPRequestHandler):
     def lang(self) -> str:
         """Язык ответа: заголовок X-Lang от интерфейса, иначе Accept-Language."""
         lang = (self.headers.get("X-Lang") or "").lower()
-        if lang in ("ru", "en"):
-            return lang
-        accept = (self.headers.get("Accept-Language") or "").lower()
-        return "ru" if not accept or accept.startswith("ru") else "en"
+        return lang if lang in ("ru", "en") else "en"
 
     def cookie_token(self) -> str | None:
         c = SimpleCookie()

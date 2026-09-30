@@ -195,9 +195,19 @@ function changePassword() {
 
 /* ================================================================== оболочка */
 
+async function switchLang(lang) {
+  if (state.me) {
+    try { await api('/api/me/lang', { method: 'PUT', body: { lang } }); } catch { /* сохраним хотя бы в браузере */ }
+  }
+  setLang(lang);
+}
+
 async function start() {
   try { state.me = await api('/api/me'); } catch { return; }
   const me = state.me;
+  // Язык хранится в профиле: в другом браузере или по другому адресу он тот же
+  if (me.lang && me.lang !== LANG) { setLang(me.lang); return; }
+  if (!me.lang) api('/api/me/lang', { method: 'PUT', body: { lang: LANG } }).catch(() => {});
   $('auth').classList.add('hidden'); $('shell').classList.remove('hidden');
   document.body.classList.toggle('is-admin', isAdmin());
   renderVersion();
@@ -269,11 +279,12 @@ function renderSelbar() {
   $('sel-compare').disabled = !pair;
   $('sel-compare').title = pair ? t('Сравнить два выбранных бэкапа') : t('Выберите ровно два бэкапа');
   const chosen = state.backups.filter((b) => state.selected.has(b.id));
-  const deletable = chosen.filter((b) => b.deletable).length, protectedN = chosen.length - deletable;
+  const deletable = chosen.filter((b) => b.deletable).length;
+  const hideN = chosen.filter((b) => b.deletable && b.delete_mode === 'hide').length;
   $('sel-delete').classList.toggle('hidden', !(isAdmin() && deletable));
   $('sel-delete').querySelector('span').textContent = `${t("Удалить")} ${deletable}`;
-  $('sel-hint').classList.toggle('hidden', !(isAdmin() && protectedN));
-  $('sel-hint').textContent = protectedN ? `${protectedN} ${plural(protectedN, t('бэкап'), t('бэкапа'), t('бэкапов'))} ${t("из истории git удалить нельзя")}` : '';
+  $('sel-hint').classList.toggle('hidden', !(isAdmin() && hideN));
+  $('sel-hint').textContent = hideN ? t('бэкапы из истории git будут убраны из списка, коммиты останутся') : '';
 }
 
 function actionCell(b) {
@@ -286,9 +297,10 @@ function actionCell(b) {
       : `<button class="icon-btn warn" data-act="restore" title="${t("Восстановить (/import)")}">${icon('restore', 'i-sm')}</button>`;
   }
   if (isAdmin() && b.deletable) {
+    const hide = b.delete_mode === 'hide';
     html += c && c.id === b.id && c.action === 'delete'
-      ? `<span class="confirm"><button class="yes" data-act="delete-yes">${t("Удалить?")}</button><button class="link" data-act="cancel">✕</button></span>`
-      : `<button class="icon-btn danger" data-act="delete" title="${t("Удалить")}">${icon('trash', 'i-sm')}</button>`;
+      ? `<span class="confirm"><button class="yes" data-act="delete-yes" title="${hide ? t('Коммит останется в истории git и в Gitea') : ''}">${hide ? t('Убрать из списка?') : t('Удалить?')}</button><button class="link" data-act="cancel">✕</button></span>`
+      : `<button class="icon-btn danger" data-act="delete" title="${hide ? t('Убрать из списка (коммит останется в истории git)') : t('Удалить')}">${icon('trash', 'i-sm')}</button>`;
   }
   return `<div class="row gap-sm">${html}</div>`;
 }
@@ -433,9 +445,10 @@ async function bulkDelete() {
   try {
     const p = await api('/api/backups/bulk-delete/preview', { method: 'POST', body: { ids } });
     openModal({ title: `<h3>${t("Удаление бэкапов")}</h3>`, narrow: true,
-      body: `<p>${t("Будет удалено")} <strong>${p.total}</strong> ${plural(p.total, t('бэкап'), t('бэкапа'), t('бэкапов'))} ${t("вместе со всеми файлами снимка. Отменить нельзя.")}</p>
+      body: `${p.delete ? `<p>${t("Будет удалено")} <strong>${p.delete}</strong> ${plural(p.delete, t('бэкап'), t('бэкапа'), t('бэкапов'))} ${t("вместе со всеми файлами снимка. Отменить нельзя.")}</p>` : ''}
+        ${p.hide ? `<p>${t("Будет убрано из списка")} <strong>${p.hide}</strong> ${plural(p.hide, t('бэкап'), t('бэкапа'), t('бэкапов'))}. ${t("Коммиты останутся в истории git и в Gitea: git не удаляет историю.")}</p>` : ''}
         <table class="plain-table"><thead><tr><th>${t("Устройство")}</th><th>${t("Бэкапов")}</th></tr></thead><tbody class="static">
-        ${p.devices.filter((r) => r.deletable).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.deletable}</td></tr>`).join('')}</tbody></table>
+        ${p.devices.map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.delete + r.hide}</td></tr>`).join('')}</tbody></table>
         ${p.over_limit ? `<p class="alert alert-error">${t("За раз — не больше")} ${p.limit}.</p>` : ''}
         <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">${t("Отмена")}</button>
         <button class="btn btn-danger" data-act="bulk-yes" ${p.over_limit || !p.total ? 'disabled' : ''}>${t("Удалить")} ${p.total}</button></div>` });
@@ -444,7 +457,8 @@ async function bulkDelete() {
       await withBusy(el, t('Удаление…'), async () => {
         const r = await api('/api/backups/bulk-delete', { method: 'POST', body: { ids } });
         closeModal(); state.selected.clear();
-        toast(r.failures.length ? `${t("Удалено")} ${r.deleted}${t(", ошибок:")} ${r.failures.length}` : `${t("Удалено:")} ${r.deleted}`, !!r.failures.length);
+        const done = r.deleted + r.hidden;
+        toast(r.failures.length ? `${t("Удалено")} ${done}${t(", ошибок:")} ${r.failures.length}` : `${t("Удалено:")} ${done}`, !!r.failures.length);
         loadBackups();
       });
     };
@@ -465,7 +479,10 @@ async function restoreBackup(id) {
 
 async function deleteOne(id) {
   state.confirm = null;
-  try { await api(`/api/backups/${id}`, { method: 'DELETE' }); state.selected.delete(id); toast(t('Бэкап удалён')); loadBackups(); }
+  try {
+    const r = await api(`/api/backups/${id}`, { method: 'DELETE' });
+    state.selected.delete(id); toast(r.result === 'hidden' ? t('Бэкап убран из списка') : t('Бэкап удалён')); loadBackups();
+  }
   catch (e) { toast(e.message, true); renderList(); }
 }
 
@@ -591,6 +608,8 @@ function deviceForm(dev) {
       <label>${t("Пароль")} <input class="input" type="password" name="password" autocomplete="new-password"
         placeholder="${d.password_set ? t('задан — оставьте пустым, чтобы не менять') : ''}" ${d.password_set ? '' : 'required'}></label>
       <label class="wide">${t("Заметка")} <input class="input" name="notes" value="${esc(d.notes)}"></label>
+      <label class="wide">${t("Прежние имена")} <input class="input" name="aliases" value="${esc((d.aliases || []).join(', '))}" placeholder="rtr1, old-core">
+        <span class="hint">${t("Бэкапы и журнал под этими именами показываются у этого устройства. При переименовании старое имя добавляется сюда само.")}</span></label>
       <label class="check"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}> ${t("Включено в расписание")}</label>
     </div></fieldset>
     <fieldset><legend>${t("Что и как забирать")}</legend><div class="form-grid">
@@ -1106,7 +1125,7 @@ const AUDIT_LABEL = {
   device_delete: t('устройство удалено'), user_create: t('пользователь создан'), user_role: t('смена роли'),
   user_reset_password: t('временный пароль'), user_delete: t('пользователь удалён'), backup_manual: t('ручной бэкап'),
   backup_delete: t('бэкап удалён'), backup_bulk_delete: t('удаление бэкапов'), backup_restore: t('восстановление'),
-  backup_download: t('скачивание'), run_all: t('запуск всех'), update_apply: t('обновление'), update_failed: t('ошибка обновления'),
+  backup_download: t('скачивание'), run_all: t('запуск всех'), update_apply: t('обновление'), update_failed: t('ошибка обновления'), backup_hide: t('бэкап убран из списка'), device_rename: t('устройство переименовано'), device_aliases: t('прежние имена'), device_rename_failed: t('ошибка переименования'),
 };
 
 async function loadAudit() {
@@ -1142,7 +1161,7 @@ function bindGlobal() {
   $('modal-close').onclick = closeModal;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
   for (const b of document.querySelectorAll('[data-act=theme]')) b.onclick = cycleTheme;
-  for (const b of document.querySelectorAll('[data-act=lang]')) b.onclick = () => setLang(LANG === 'ru' ? 'en' : 'ru');
+  for (const b of document.querySelectorAll('[data-act=lang]')) b.onclick = () => switchLang(LANG === 'ru' ? 'en' : 'ru');
   window.addEventListener('hashchange', () => state.me && route());
 }
 
