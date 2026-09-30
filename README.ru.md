@@ -486,10 +486,30 @@ mv /opt/mtb/mtb.prev /opt/mtb/mtb && systemctl restart mtb
 
 ## Разработка и сборка
 
+**Linux:**
+
 ```bash
 git clone https://github.com/netcorexc0a8/mtb.git && cd mtb
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 python -m mtb serve          # http://localhost:8080, данные в ./data и ./backups
+```
+
+**Windows (PowerShell).** Нужны Python 3.11+ и Git for Windows.
+
+```powershell
+git clone https://github.com/netcorexc0a8/mtb.git; cd mtb
+py -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+python -m mtb serve          # http://localhost:8080, данные в .\data и .\backups
+```
+
+Если активация venv запрещена политикой, один раз выполните `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+На Windows работает всё, кроме самообновления: оно рассчитано на Linux-бинарник под systemd. Для хранения git нужен `git` в `PATH` — он ставится вместе с Git for Windows.
+
+**Переводы строк.** Файл `.gitattributes` держит код и скрипты в LF независимо от `core.autocrlf`. Иначе `install.sh` с CRLF, закоммиченный из Windows, не запустится на Linux. Если клон сделан до появления `.gitattributes`, обновите рабочую копию один раз (незакоммиченные изменения будут потеряны):
+
+```powershell
+git rm -r --cached -q .; git reset --hard
 ```
 
 **Бинарник:**
@@ -500,7 +520,17 @@ pip install pyinstaller && pyinstaller --clean --noconfirm mtb.spec
 
 Для совместимости со старыми glibc собирайте в `python:3.11-slim-buster`, как CI.
 
-**Релиз:** `scripts/release.sh 0.2.0` (или `0.2.0-rc.1` для пре-релиза). Скрипт записывает версию в `mtb/_version.py`, коммитит, ставит тег `v0.2.0` и пушит. Так версия в коде, тег и версия в интерфейсе всегда совпадают. Workflow соберёт бинарники (linux-amd64, linux-arm64), опубликует образ в GHCR и создаст GitHub Release с `install.sh`, systemd-юнитом и `SHA256SUMS`.
+**Релиз** — это git-тег. Сначала пушится `main`, затем ставится тег на коммит, который уже есть на GitHub:
+
+```bash
+git push origin main
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Формат тега — `vX.Y.Z` или `vX.Y.Z-rc.1` / `vX.Y.Z-dev`, через дефис. Версии с суффиксом публикуются как пре-релизы и не получают `latest`. Версию в код записывать не нужно: CI подставит её из тега в бинарник и образ, а при запуске из git-клона она определяется через `git describe`. Для локальной сборки образа версию можно передать явно: `docker build --build-arg VERSION=0.2.0 .`.
+
+Workflow соберёт бинарники (linux-amd64, linux-arm64), опубликует образ в GHCR и создаст GitHub Release с `install.sh`, systemd-юнитом и `SHA256SUMS`.
 
 ### Структура проекта
 
@@ -524,7 +554,7 @@ mtb/
 │   └── notify.py        # Telegram
 ├── packaging/           # точка входа PyInstaller, systemd-юнит
 ├── docs/                # скриншоты
-├── scripts/release.sh   # выпуск релиза: версия → коммит → тег → push
+├── .gitattributes       # LF для кода и скриптов
 ├── install.sh, mtb.spec, Dockerfile, docker-compose.yml, .env.example
 ├── README.md            # English
 ├── README.ru.md         # русский (основной)

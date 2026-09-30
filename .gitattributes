@@ -1,0 +1,8 @@
+# Разработка идёт на Windows, а код и скрипты работают на Linux:
+# в репозитории и в рабочей копии — всегда LF, независимо от core.autocrlf.
+# install.sh с CRLF на Linux падает на первой строке.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.patch -text

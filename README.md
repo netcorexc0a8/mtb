@@ -488,10 +488,30 @@ For a detailed log, use `LOG_LEVEL=DEBUG`.
 
 ## Development and build
 
+**Linux:**
+
 ```bash
 git clone https://github.com/netcorexc0a8/mtb.git && cd mtb
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 python -m mtb serve          # http://localhost:8080, data in ./data and ./backups
+```
+
+**Windows (PowerShell).** Requires Python 3.11+ and Git for Windows.
+
+```powershell
+git clone https://github.com/netcorexc0a8/mtb.git; cd mtb
+py -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+python -m mtb serve          # http://localhost:8080, data in .\data and .\backups
+```
+
+If the execution policy blocks venv activation, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+
+Everything works on Windows except self-update, which targets the Linux binary under systemd. Git storage needs `git` in `PATH`, which Git for Windows provides.
+
+**Line endings.** `.gitattributes` keeps code and scripts in LF regardless of `core.autocrlf`. Otherwise an `install.sh` committed from Windows with CRLF would not run on Linux. If your clone predates `.gitattributes`, refresh the working copy once (uncommitted changes will be lost):
+
+```powershell
+git rm -r --cached -q .; git reset --hard
 ```
 
 **Binary:**
@@ -502,7 +522,17 @@ pip install pyinstaller && pyinstaller --clean --noconfirm mtb.spec
 
 For compatibility with older glibc, build inside `python:3.11-slim-buster`, as CI does.
 
-**Release:** `scripts/release.sh 0.2.0` (or `0.2.0-rc.1` for a pre-release). The script writes the version to `mtb/_version.py`, commits, tags `v0.2.0` and pushes. This keeps the version in the code, the tag and the version in the UI in sync. The workflow builds the binaries (linux-amd64, linux-arm64), publishes the image to GHCR, and creates a GitHub Release with `install.sh`, the systemd unit and `SHA256SUMS`.
+**Release** means a git tag. Push `main` first, then tag a commit that is already on GitHub:
+
+```bash
+git push origin main
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag format is `vX.Y.Z` or `vX.Y.Z-rc.1` / `vX.Y.Z-dev`, with a hyphen. Versions with a suffix are published as pre-releases and do not get `latest`. There is no need to write the version into the code: CI injects it from the tag into the binary and the image, and when running from a git clone it is taken from `git describe`. For a local image build, pass it explicitly: `docker build --build-arg VERSION=0.2.0 .`.
+
+The workflow builds the binaries (linux-amd64, linux-arm64), publishes the image to GHCR, and creates a GitHub Release with `install.sh`, the systemd unit and `SHA256SUMS`.
 
 ### Project layout
 
@@ -526,7 +556,7 @@ mtb/
 │   └── notify.py        # Telegram
 ├── packaging/           # PyInstaller entry point, systemd unit
 ├── docs/                # screenshots
-├── scripts/release.sh   # cut a release: version → commit → tag → push
+├── .gitattributes       # LF for code and scripts
 ├── install.sh, mtb.spec, Dockerfile, docker-compose.yml, .env.example
 ├── README.md            # English
 ├── README.ru.md         # Russian (primary)

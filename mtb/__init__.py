@@ -5,12 +5,11 @@ from ._version import __version__ as _built_version
 
 
 def _detect_version() -> str:
-    """Версия релиза.
+    """Версия релиза — это git-тег.
 
-    Сборка CI (бинарник, Docker-образ) записывает версию из git-тега в _version.py.
-    scripts/release.sh делает то же при выпуске, так что исходники с тега тоже
-    знают свою версию. В git-клоне между релизами берём `git describe`:
-    например, 0.1.1-3-gabc1234 — три коммита после v0.1.1.
+    CI при сборке бинарника и Docker-образа записывает версию из тега в
+    _version.py (в репозитории там 0.0.0-dev). При запуске из git-клона
+    берём `git describe`: 0.2.0 на теге, 0.2.0-3-gabc1234 — три коммита после.
     """
     root = Path(__file__).resolve().parent.parent
     if (root / ".git").exists():
