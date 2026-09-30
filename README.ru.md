@@ -126,12 +126,27 @@ backups/
 
 **1. Сертификат для API-SSL.** Не нужен при транспорте «Только SSH». Ключ должен быть не меньше 2048 бит.
 
+Сертификат с `key-usage=tls-server` не может подписать сам себя, поэтому сначала создаётся локальный CA, а им подписывается сертификат API-SSL:
+
 ```routeros
+# локальный CA (подписывает сам себя)
+/certificate add name=local-ca common-name=local-ca days-valid=3650 key-size=2048 \
+    key-usage=key-cert-sign,crl-sign
+/certificate sign local-ca
+
+# сертификат API-SSL, подписанный этим CA
 /certificate add name=api-ssl common-name=core-rtr1 days-valid=3650 key-size=2048 \
     key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign api-ssl
+/certificate sign api-ssl ca=local-ca
+
+/certificate print          # у api-ssl должны быть флаги K и I; подпись занимает несколько секунд
 /ip service set api-ssl certificate=api-ssl address=10.10.10.5/32 disabled=no
 ```
+
+Для проверки TLS в mtb подойдёт любой из двух вариантов:
+
+- **Отпечаток.** В форме устройства нажмите «Получить с устройства». После перевыпуска `api-ssl` отпечаток придётся обновить.
+- **CA в PEM.** Выгрузите `/certificate export-certificate local-ca type=pem`, заберите файл `cert_export_local-ca.crt` через Winbox (*Files*) или SFTP и вставьте содержимое в поле «Сертификат / CA (PEM)». Проверка переживёт перевыпуск `api-ssl`, пока он подписан тем же CA. Приватный ключ CA без `export-passphrase` не выгружается.
 
 **2. SSH.** Не нужен при транспорте «Только API».
 

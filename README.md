@@ -128,12 +128,27 @@ In the examples, `10.10.10.5` is the mtb server.
 
 **1. API-SSL certificate.** Not needed with the "SSH only" transport. The key must be at least 2048 bits.
 
+A certificate with `key-usage=tls-server` cannot sign itself, so first create a local CA, then use it to sign the API-SSL certificate:
+
 ```routeros
+# local CA (self-signed)
+/certificate add name=local-ca common-name=local-ca days-valid=3650 key-size=2048 \
+    key-usage=key-cert-sign,crl-sign
+/certificate sign local-ca
+
+# API-SSL certificate signed by that CA
 /certificate add name=api-ssl common-name=core-rtr1 days-valid=3650 key-size=2048 \
     key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign api-ssl
+/certificate sign api-ssl ca=local-ca
+
+/certificate print          # api-ssl should show the K and I flags; signing takes a few seconds
 /ip service set api-ssl certificate=api-ssl address=10.10.10.5/32 disabled=no
 ```
+
+For TLS verification in mtb, either option works:
+
+- **Fingerprint.** Click "Fetch from device" in the device form. After `api-ssl` is reissued, you will need to update the fingerprint.
+- **CA in PEM.** Export it with `/certificate export-certificate local-ca type=pem`, download `cert_export_local-ca.crt` via Winbox (*Files*) or SFTP, and paste its contents into the "Certificate / CA (PEM)" field. Verification keeps working when `api-ssl` is reissued, as long as the same CA signs it. Without `export-passphrase`, the CA private key is not exported.
 
 **2. SSH.** Not needed with the "API only" transport.
 
