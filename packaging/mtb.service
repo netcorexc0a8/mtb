@@ -14,16 +14,18 @@ Environment=DATA_DIR=/var/lib/mtb/data
 Environment=WEB_LISTEN=0.0.0.0:8080
 # Необязательные переопределения (WEB_LISTEN, WEB_TLS_*, WEB_COOKIE_SECURE, LOG_LEVEL)
 EnvironmentFile=-/etc/mtb/mtb.env
-ExecStart=/usr/local/bin/mtb serve
-Restart=on-failure
-RestartSec=30
+ExecStart=/opt/mtb/mtb serve
+# always: после обновления из веба сервис завершается и поднимается с новым бинарником
+Restart=always
+RestartSec=5
 
 # Ограничения
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/mtb
+# /opt/mtb — чтобы сервис мог обновить свой бинарник из веб-интерфейса
+ReadWritePaths=/var/lib/mtb /opt/mtb
 UMask=0077
 
 [Install]

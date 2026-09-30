@@ -65,6 +65,24 @@ def cmd_serve(ctx: Context, web: bool = True) -> None:
 
     sched.add_job(job, trigger(s), id="backup", max_instances=1, coalesce=True, misfire_grace_time=3600)
 
+    from datetime import datetime, timedelta
+    from . import updater
+
+    def update_job():
+        try:
+            v = config.read_settings(ctx.db, ctx.box)
+            if v["update_check"]:
+                st = updater.check(ctx.db, v["update_channel"])
+                latest = (st.get("latest") or {}).get("version")
+                if latest and updater.version_key(latest) > updater.version_key(__version__):
+                    log.info("Доступна новая версия mtb: %s (текущая %s)", latest, __version__)
+        except Exception:  # noqa: BLE001
+            log.exception("Ошибка проверки обновлений")
+
+    sched.add_job(update_job, "interval", hours=updater.CHECK_INTERVAL_HOURS, id="update-check",
+                  next_run_time=datetime.now(ZoneInfo(s.timezone)) + timedelta(seconds=60),
+                  max_instances=1, coalesce=True)
+
     def reschedule():
         st = ctx.settings()
         sched.reschedule_job("backup", trigger=trigger(st))

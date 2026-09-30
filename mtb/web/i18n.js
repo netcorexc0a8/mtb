@@ -143,6 +143,27 @@ const EN = {
   'Отменить изменения': 'Discard changes', 'Есть несохранённые изменения': 'Unsaved changes',
   'Сообщение отправлено': 'Message sent', 'Нет изменений': 'No changes', 'Сохранено:': 'Saved:',
 
+  // ---- версия и обновления
+  'Обновления': 'Updates', 'Проверять новые версии на GitHub (раз в 6 часов)': 'Check GitHub for new versions (every 6 hours)',
+  'Канал': 'Channel', 'авто: пре-релизы, если установлен пре-релиз': 'auto: pre-releases if a pre-release is installed',
+  'только стабильные': 'stable only', 'включая пре-релизы': 'including pre-releases',
+  'Проверить сейчас': 'Check now', 'Подробнее': 'Details', 'Доступна версия': 'Version available',
+  'Установлена последняя версия': 'You are on the latest version', 'Установлена последняя версия.': 'You are on the latest version.',
+  'Примечания к этой версии': 'Release notes for this version', 'ещё не проверялось': 'not checked yet',
+  'Установлена': 'Installed', 'проверено:': 'checked:', 'доступна': 'available', 'обновлений нет': 'up to date',
+  'бинарник (install.sh)': 'binary (install.sh)', 'из исходников': 'from source',
+  'Обновление': 'Update', 'Доступна': 'Available', 'Последняя': 'Latest', 'пре-релиз': 'pre-release',
+  'Бинарник будет скачан с GitHub, проверен по SHA256 и заменён. Сервис перезапустится сам; если идёт бэкап — после его окончания. Предыдущая версия сохранится как':
+    'The binary will be downloaded from GitHub, verified with SHA256 and replaced. The service restarts by itself — after the current backup, if one is running. The previous version is kept as',
+  'Позже': 'Later', 'Обновить до': 'Update to', 'Обновляет администратор.': 'An administrator performs updates.',
+  'Способ установки:': 'Installation method:', 'Обновление выполняется командой на сервере:': 'Update by running this on the server:',
+  'Репозиторий:': 'Repository:', 'Что нового': "What's new", 'на GitHub': 'on GitHub', '(описание не заполнено)': '(no description)',
+  'Скачивание и проверка…': 'Downloading and verifying…', 'Обновление до': 'Updating to',
+  'Новая версия установлена. Ждём окончания текущего бэкапа, затем перезапуск…': 'New version installed. Waiting for the current backup to finish, then restarting…',
+  'Новая версия установлена. Перезапуск…': 'New version installed. Restarting…', 'Обновлено до': 'Updated to',
+  'Сервис не вернулся с новой версией. Проверьте journalctl -u mtb.': 'The service did not come back with the new version. Check journalctl -u mtb.',
+  'обновление': 'update', 'ошибка обновления': 'update failed',
+
   // ---- пользователи
   'пароль не задан': 'no password', 'временный пароль': 'temporary password', 'активен': 'active', '(вы)': '(you)',
   'администратор': 'administrator', 'просмотр': 'viewer', 'Выдать временный пароль': 'Issue a temporary password',

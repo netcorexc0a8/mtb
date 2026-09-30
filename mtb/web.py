@@ -34,6 +34,7 @@ from .mikrotik import FAILURE_RE, check_device, fetch_fingerprint, restore_confi
 from .notify import telegram_send
 from .probe import format_report, probe_device
 from .runner import RUN_LOCK, run_once
+from . import updater
 
 log = logging.getLogger("mtb.web")
 
@@ -177,7 +178,7 @@ class WebApp:
     @route("GET", "/healthz", role=None)
     def healthz(self, req: Request):
         row = self.db.one("SELECT MAX(finished_at) AS t FROM runs WHERE kind='scheduled' AND failed='{}'")
-        return {"ok": True, "last_success": row["t"] if row else None}
+        return {"ok": True, "version": __version__, "last_success": row["t"] if row else None}
 
     @route("GET", "/api/me")
     def me(self, req: Request):
@@ -186,7 +187,9 @@ class WebApp:
         return {"user": req.username, "role": req.user["role"], "can_write": req.user["role"] == "admin",
                 "version": __version__, "timezone": s.timezone, "mode": cat.mode, "restore": s.web_restore,
                 "devices": cat.devices(), "configured": [d.name for d in s.devices],
-                "passphrase_set": bool(s.backup_passphrase)}
+                "passphrase_set": bool(s.backup_passphrase),
+                "update": {k: v for k, v in updater.summary(self.db).items() if k != "latest"}
+                | {"latest_version": (updater.summary(self.db)["latest"] or {}).get("version")}}
 
     @route("POST", "/api/me/password")
     def change_own_password(self, req: Request):
@@ -457,6 +460,42 @@ class WebApp:
         except Exception as exc:  # noqa: BLE001
             raise ApiError(502, str(exc)) from exc
         return {"ok": True}
+
+    # ================================================================ обновления
+
+    def _update_payload(self, req: Request) -> dict:
+        info = updater.install_info()
+        summ = updater.summary(self.db)
+        can = info["can_apply"] and req.user["role"] == "admin"
+        return {**summ, "install": {**info, "can_apply": can, "reason": req.tr(info.get("reason"))},
+                "instructions": updater.instructions(info, summ["latest"]),
+                "error": req.tr(summ["error"]), "running": RUN_LOCK.locked()}
+
+    @route("GET", "/api/update")
+    def update_get(self, req: Request):
+        return self._update_payload(req)
+
+    @route("POST", "/api/update/check", role="admin")
+    def update_check(self, req: Request):
+        updater.check(self.db, config.read_settings(self.db, self.box)["update_channel"])
+        return self._update_payload(req)
+
+    @route("POST", "/api/update/apply", role="admin")
+    def update_apply(self, req: Request):
+        latest = updater.summary(self.db)["latest"]
+        wanted = str(req.body.get("version", ""))
+        if not latest or latest["version"] != wanted:
+            raise ApiError(409, "Версия изменилась — обновите страницу и проверьте снова")
+        if updater.version_key(wanted) <= updater.version_key(__version__):
+            raise ApiError(400, "Эта версия не новее текущей")
+        try:
+            result = updater.apply(latest)
+        except Exception as exc:  # noqa: BLE001
+            self.audit(req, "update_failed", f"{__version__} → {wanted}: {exc}")
+            raise ApiError(502, str(exc)) from exc
+        self.audit(req, "update_apply", f"{__version__} → {wanted}")
+        updater.schedule_restart(RUN_LOCK)
+        return {"ok": True, **result, "waiting_for_run": RUN_LOCK.locked()}
 
     # ================================================================ пользователи
 

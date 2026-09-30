@@ -6,7 +6,9 @@ set -eu
 
 REPO="${MTB_REPO:-netcorexc0a8/mtb}"
 VERSION="${1:-latest}"
-BIN=/usr/local/bin/mtb
+OPT=/opt/mtb
+BIN=$OPT/mtb
+LINK=/usr/local/bin/mtb
 ETC=/etc/mtb
 VAR=/var/lib/mtb
 UNIT=/etc/systemd/system/mtb.service
@@ -37,12 +39,15 @@ echo ">> Загрузка $ASSET ($VERSION)"
 fetch "$BASE/$ASSET" "$TMP/$ASSET"
 fetch "$BASE/SHA256SUMS" "$TMP/SHA256SUMS"
 (cd "$TMP" && grep " $ASSET\$" SHA256SUMS | sha256sum -c -) || { echo "Контрольная сумма не совпала"; exit 1; }
-install -m 0755 "$TMP/$ASSET" "$BIN"
-echo ">> Установлено: $("$BIN" --version)"
-
 if ! id mtb >/dev/null 2>&1; then
   useradd --system --home-dir "$VAR" --shell /usr/sbin/nologin mtb
 fi
+# Бинарник принадлежит пользователю сервиса — так его можно обновить из веб-интерфейса.
+# Команда mtb в PATH — ссылка на него.
+install -d -m 0755 -o mtb -g mtb "$OPT"
+install -m 0755 -o mtb -g mtb "$TMP/$ASSET" "$BIN"
+ln -sfn "$BIN" "$LINK"
+echo ">> Установлено: $("$BIN" --version)"
 install -d -m 0750 -o root -g mtb "$ETC"
 install -d -m 0700 -o mtb -g mtb "$VAR" "$VAR/backups" "$VAR/data"
 
@@ -54,7 +59,8 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
   fetch "$BASE/mtb.service" "$UNIT"
   systemctl daemon-reload
-  systemctl enable --now mtb
+  systemctl enable mtb >/dev/null 2>&1
+  systemctl restart mtb          # при повторном запуске — перезапуск на новой версии
   sleep 2
   systemctl is-active --quiet mtb && echo ">> Сервис запущен" || echo "!! Сервис не запустился: journalctl -u mtb -e"
 fi

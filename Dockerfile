@@ -21,7 +21,7 @@ RUN echo "__version__ = \"${VERSION}\"" > mtb/_version.py \
 
 # HOME в /tmp: контейнер может работать под произвольным uid (PUID)
 ENV PYTHONUNBUFFERED=1 HOME=/tmp \
-    DATA_DIR=/data BACKUP_DIR=/backups WEB_LISTEN=0.0.0.0:8080
+    DATA_DIR=/data BACKUP_DIR=/backups WEB_LISTEN=0.0.0.0:8080 MTB_RUNTIME=docker
 
 EXPOSE 8080
 

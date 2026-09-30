@@ -256,6 +256,8 @@ SETTINGS_SPEC: dict[str, tuple[type, object, bool]] = {
     "telegram_chat": (str, "", False),
     "web_restore": (bool, False, False),
     "notify_lang": (str, "ru", False),
+    "update_check": (bool, True, False),
+    "update_channel": (str, "auto", False),
 }
 
 
@@ -323,6 +325,8 @@ def validate_settings(v: dict) -> None:
             raise ConfigError("Для Gitea нужны пользователь и токен")
     if v["gitea_ca_pem"] and "BEGIN CERTIFICATE" not in v["gitea_ca_pem"]:
         raise ConfigError("CA Gitea должен быть в формате PEM")
+    if v["update_channel"] not in ("auto", "stable", "prerelease"):
+        raise ConfigError("Канал обновлений — auto, stable или prerelease")
     if v["notify_lang"] not in ("ru", "en"):
         raise ConfigError("Язык уведомлений — ru или en")
     if bool(v["telegram_token"]) != bool(v["telegram_chat"]):

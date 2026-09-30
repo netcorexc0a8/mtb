@@ -30,6 +30,7 @@ It ships as a single binary on GitHub Releases (Linux amd64/arm64) and as a Dock
 - **First login:** an `admin` user is created, and you choose its password on the first login.
 - **English and Russian interface**, with a light, dark or system theme.
 - **Telegram notifications** on errors and changes.
+- **Updates:** the UI shows the version, the service announces new GitHub releases and updates in one click.
 
 ## Contents
 
@@ -188,7 +189,7 @@ curl -fsSLO https://github.com/netcorexc0a8/mtb/releases/latest/download/install
 
 What the script does:
 
-- verifies the binary against `SHA256SUMS` and installs it to `/usr/local/bin/mtb`;
+- verifies the binary against `SHA256SUMS` and installs it to `/opt/mtb/mtb`, with a `/usr/local/bin/mtb` link. The file is owned by the service user so that mtb can update itself from the web UI;
 - creates the `mtb` system user and `/var/lib/mtb/{data,backups}` with mode 0700;
 - installs and starts `mtb.service`.
 
@@ -290,6 +291,7 @@ The **Settings** section, admins only.
 | Storage and encryption | Passphrase for `.backup` and certificates. Mode: git or snapshots. For git: whether to keep history. For snapshots: retention, minimum kept, "only on changes". |
 | Gitea | Repository URL, user, token, branch, commit author, CA in PEM, disabling TLS verification. |
 | Telegram | Bot token, `chat_id`, notification language (English or Russian), "send a test message" button. |
+| Updates | Whether to check GitHub for new versions, and the channel: auto, stable only, or including pre-releases. "Check now" button. See [Upgrading](#upgrading). |
 | Web interface | Allow restore (`/import`) from the backup list. Off by default. |
 
 Secrets (the passphrase and tokens) are never sent back to the UI; you only see "set" or "not set". Leaving the field empty on save keeps the current value, and the "delete" checkbox clears it.
@@ -415,6 +417,7 @@ If restore is enabled in the settings, the "Restore" button in the backup list u
 - **The audit log** records logins, failed attempts, changes, downloads, deletions and restores.
 - **Expose the UI only over HTTPS:** a reverse proxy with `WEB_COOKIE_SECURE=true`, or `WEB_TLS_CERT` / `WEB_TLS_KEY`.
 - **The router `backup` user:** restrict it by source address, and restrict services with `address=`. Do not disable TLS verification: this account has the `sensitive` and `write` policies.
+- **Self-update.** The binary in `/opt/mtb` is owned by the service user, otherwise updating from the web UI would be impossible. A new file is accepted only with a matching SHA256 from the release and after a `--version` check. If you don't want this, make root the owner (`chown root: /opt/mtb /opt/mtb/mtb`): the UI will then only show the update command.
 - **The router's SSH host key** is remembered on first connection. If the key changes later, the connection is refused.
 
 ## Backing up mtb itself
@@ -425,10 +428,42 @@ For a live copy, use `sqlite3 mtb.db ".backup copy.db"`, or stop the service fir
 
 ## Upgrading
 
-| Method | How |
+**The version** is shown in the header next to the logo and matches the release tag on GitHub. Clicking it opens the release notes for that version.
+
+**Checking for new versions.** Every 6 hours (and via "Check now" under **Settings → Updates**), mtb fetches the repository's release list. If a newer version exists, a `↑ vX.Y.Z` badge appears in the header for all users. Clicking it opens a dialog with the release notes.
+
+The **channel** controls which releases are considered:
+
+| Channel | What is offered |
 |---|---|
-| systemd | `curl -fsSL …/install.sh \| sudo sh` — the configuration and database are left alone. |
-| Docker Compose | `docker compose pull && docker compose up -d` |
+| auto (default) | If a pre-release is installed (`0.2.0-rc.1`, `0.1.0-dev`), both pre-releases and stable versions. If a stable version is installed, stable only. |
+| stable only | Versions without a suffix only. |
+| including pre-releases | All versions. |
+
+In air-gapped networks you can turn the check off. The service needs access to `api.github.com` and `github.com`; a proxy is set with the standard `HTTPS_PROXY` / `NO_PROXY` variables.
+
+**Updating from the web UI** works for `install.sh` installations (binary under systemd). An admin clicks "Update to vX.Y.Z", and mtb:
+
+1. downloads `mtb-linux-<arch>` and `SHA256SUMS` for that release and verifies the checksum;
+2. runs the new file with `--version` to confirm it is the expected version;
+3. keeps the current binary as `/opt/mtb/mtb.prev` and atomically replaces it;
+4. waits for any running backup to finish and exits, after which systemd starts the service with the new version.
+
+The page waits for the restart and reloads itself. Every update and every failed attempt is recorded in the audit log.
+
+**Rollback:**
+
+```bash
+mv /opt/mtb/mtb.prev /opt/mtb/mtb && systemctl restart mtb
+```
+
+**Other installation methods.** For these, the update dialog shows a ready-to-run command:
+
+| Method | How to upgrade |
+|---|---|
+| systemd, manually | `curl -fsSL https://github.com/netcorexc0a8/mtb/releases/download/vX.Y.Z/install.sh \| sh -s vX.Y.Z` — the configuration and database are left alone. |
+| Docker Compose | `docker compose pull && docker compose up -d`. Only stable versions get the `latest` tag; for a pre-release, set the image tag explicitly. |
+| From source | `git fetch --tags && git checkout vX.Y.Z`, then restart. |
 
 The database schema is migrated automatically on start.
 
@@ -467,7 +502,7 @@ pip install pyinstaller && pyinstaller --clean --noconfirm mtb.spec
 
 For compatibility with older glibc, build inside `python:3.11-slim-buster`, as CI does.
 
-**Release:** `git tag v0.1.0 && git push origin v0.1.0`. The workflow builds the binaries (linux-amd64, linux-arm64), publishes the image to GHCR, and creates a GitHub Release with `install.sh`, the systemd unit and `SHA256SUMS`.
+**Release:** `scripts/release.sh 0.2.0` (or `0.2.0-rc.1` for a pre-release). The script writes the version to `mtb/_version.py`, commits, tags `v0.2.0` and pushes. This keeps the version in the code, the tag and the version in the UI in sync. The workflow builds the binaries (linux-amd64, linux-arm64), publishes the image to GHCR, and creates a GitHub Release with `install.sh`, the systemd unit and `SHA256SUMS`.
 
 ### Project layout
 
@@ -487,9 +522,11 @@ mtb/
 │   ├── probe.py         # transport checks
 │   ├── storage.py       # git / snapshots storage, Gitea push
 │   ├── catalog.py       # backup index for the web UI
+│   ├── updater.py       # GitHub release checks and self-update
 │   └── notify.py        # Telegram
 ├── packaging/           # PyInstaller entry point, systemd unit
 ├── docs/                # screenshots
+├── scripts/release.sh   # cut a release: version → commit → tag → push
 ├── install.sh, mtb.spec, Dockerfile, docker-compose.yml, .env.example
 ├── README.md            # English
 ├── README.ru.md         # Russian (primary)

@@ -141,6 +141,19 @@ EN: dict[str, str] = {
     "файл не найден": "file not found",
     "этот бэкап нельзя удалить: он часть истории git": "this backup cannot be deleted: it is part of the git history",
     "Язык уведомлений — ru или en": "Notification language must be ru or en",
+    # ---- обновления
+    "Канал обновлений — auto, stable или prerelease": "Update channel must be auto, stable or prerelease",
+    "Версия изменилась — обновите страницу и проверьте снова": "The version has changed — reload the page and check again",
+    "Эта версия не новее текущей": "This version is not newer than the current one",
+    "платформа {}/{} не поддерживается": "platform {}/{} is not supported",
+    "нет прав на запись в {} — переустановите через install.sh": "no write access to {} — reinstall with install.sh",
+    "сервис запущен не через systemd — перезапустить его некому": "the service is not running under systemd — nothing would restart it",
+    "обновление из веба для этой установки недоступно": "updating from the web is not available for this installation",
+    "в релизе {} нет {} или SHA256SUMS": "release {} has no {} or SHA256SUMS",
+    "в SHA256SUMS нет строки для {}": "SHA256SUMS has no line for {}",
+    "контрольная сумма не совпала — файл повреждён или подменён": "checksum mismatch — the file is corrupted or tampered with",
+    "новый бинарник не запустился или сообщил версию «{}»": "the new binary failed to run or reported version \"{}\"",
+    "GitHub: превышен лимит запросов, попробуйте позже": "GitHub: rate limit exceeded, try again later",
     # ---- проверка устройства
     "SSH ok, SFTP ok": "SSH ok, SFTP ok",
 }

@@ -200,7 +200,7 @@ async function start() {
   const me = state.me;
   $('auth').classList.add('hidden'); $('shell').classList.remove('hidden');
   document.body.classList.toggle('is-admin', isAdmin());
-  $('version').textContent = me.version;
+  renderVersion();
   $('user-btn').textContent = `${me.user}${isAdmin() ? '' : t(' · просмотр')} ▾`;
   renderBanners();
   route();
@@ -829,6 +829,17 @@ function renderSettings(data) {
         <span class="hint">${t("Сначала сохраните настройки. Уведомления приходят при ошибках и изменениях.")}</span></div>
     </div></section>
 
+    <section class="card"><h3>${t("Обновления")}</h3><div class="form-grid">
+      <div class="wide">${chk('update_check', t('Проверять новые версии на GitHub (раз в 6 часов)'))}</div>
+      <label>${t("Канал")} <select class="input" name="update_channel">
+        <option value="auto"${s.update_channel === 'auto' ? ' selected' : ''}>${t("авто: пре-релизы, если установлен пре-релиз")}</option>
+        <option value="stable"${s.update_channel === 'stable' ? ' selected' : ''}>${t("только стабильные")}</option>
+        <option value="prerelease"${s.update_channel === 'prerelease' ? ' selected' : ''}>${t("включая пре-релизы")}</option></select></label>
+      <div class="wide hint" id="update-status"></div>
+      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="update-check">${t("Проверить сейчас")}</button>
+        <button type="button" class="btn btn-sm" data-act="update-open">${t("Подробнее")}</button></div>
+    </div></section>
+
     <section class="card"><h3>${t("Веб-интерфейс")}</h3><div class="form-grid">
       <div class="wide">${chk('web_restore', t('Разрешить восстановление (/import по SSH) из списка бэкапов'))}</div>
       <div class="wide hint">${t("Cookie сессии")} ${data.cookie_secure ? t('с флагом Secure (HTTPS)') : t('без флага Secure — для работы через HTTPS за прокси задайте WEB_COOKIE_SECURE=true')}.</div>
@@ -841,6 +852,7 @@ function renderSettings(data) {
   </form>`;
 
   const form = $('settings-form');
+  api('/api/update').then(renderUpdateStatus).catch(() => {});
   const sync = () => {
     const v = formValues(form);
     form.querySelectorAll('[data-show]').forEach((x) => x.classList.toggle('hidden', x.dataset.show !== v.storage));
@@ -859,6 +871,15 @@ function renderSettings(data) {
   form.onclick = async (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'reset') renderSettings(data);
+    if (act === 'update-open') showUpdate();
+    if (act === 'update-check') {
+      const btn = e.target.closest('button');
+      await withBusy(btn, t('Проверка…'), async () => {
+        try { const u = await api('/api/update/check', { method: 'POST' }); applyUpdateInfo(u); renderUpdateStatus(u);
+          toast(u.error ? u.error : u.available ? `${t('Доступна версия')} v${u.latest.version}` : t('Установлена последняя версия'), !!u.error); }
+        catch (ex) { toast(ex.message, true); }
+      });
+    }
     if (act === 'test-tg') {
       const btn = e.target.closest('button');
       await withBusy(btn, t('Отправка…'), async () => {
@@ -877,6 +898,116 @@ function renderSettings(data) {
       state.me = await api('/api/me'); renderBanners(); renderSettings(r);
     } catch (ex) { $('settings-error').textContent = ex.message; $('settings-error').classList.remove('hidden'); }
   };
+}
+
+/* ================================================================== версия и обновления */
+
+function releaseUrl(v) {
+  const repo = state.me?.update?.repo || 'netcorexc0a8/mtb';
+  return /-\d+-g[0-9a-f]+|-dirty$/.test(v) ? `https://github.com/${repo}/commits/main`
+    : `https://github.com/${repo}/releases/tag/v${v}`;
+}
+
+function renderVersion() {
+  const v = state.me.version, el = $('version');
+  el.textContent = `v${v}`; el.href = releaseUrl(v); el.title = t('Примечания к этой версии');
+  applyUpdateInfo(state.me.update);
+}
+
+function applyUpdateInfo(u) {
+  const badge = $('update-badge');
+  const latest = u && (u.latest_version || u.latest?.version);
+  badge.classList.toggle('hidden', !(u && u.available && latest));
+  if (u && u.available && latest) {
+    badge.textContent = `↑ v${latest}`;
+    badge.title = `${t('Доступна версия')} v${latest}`;
+  }
+}
+
+function renderUpdateStatus(u) {
+  const el = $('update-status');
+  if (!el || !u) return;
+  const checked = u.checked_at ? fmtDate(u.checked_at) : t('ещё не проверялось');
+  el.innerHTML = `${t('Установлена')} <b>v${esc(u.current)}</b> · ${t('проверено:')} ${checked}`
+    + (u.error ? ` · <span class="err-text">${esc(u.error)}</span>`
+      : u.available ? ` · <b>${t('доступна')} v${esc(u.latest.version)}</b>` : u.checked_at ? ` · ${t('обновлений нет')}` : '');
+}
+
+const INSTALL_LABEL = { binary: 'бинарник (install.sh)', docker: 'Docker', source: 'из исходников' };
+
+async function showUpdate() {
+  openModal({ title: `<h3>${t('Обновление')}</h3>`, body: loadingBody });
+  let u;
+  try { u = await api('/api/update'); } catch (e) { openModal({ title: `<h3>${t('Обновление')}</h3>`, body: errorBody(e.message) }); return; }
+  applyUpdateInfo(u);
+  const L = u.latest;
+  const head = `<div class="update-head"><div><div class="hint">${t('Установлена')}</div><div class="ver">v${esc(u.current)}</div></div>
+      <div class="arrow">→</div>
+      <div><div class="hint">${u.available ? t('Доступна') : t('Последняя')}</div><div class="ver">${L ? 'v' + esc(L.version) : '—'}
+        ${L && L.prerelease ? `<span class="badge warn">${t('пре-релиз')}</span>` : ''}</div></div></div>`;
+  let action = '';
+  if (u.available) {
+    if (u.install.can_apply) {
+      action = `<div class="alert alert-ok">${t('Бинарник будет скачан с GitHub, проверен по SHA256 и заменён. Сервис перезапустится сам; если идёт бэкап — после его окончания. Предыдущая версия сохранится как')} <code>${esc(u.install.path)}.prev</code>.</div>
+        <div class="row gap dialog-actions"><button class="btn" data-act="modal-close">${t('Позже')}</button>
+        <button class="btn btn-primary" data-act="update-apply">${t('Обновить до')} v${esc(L.version)}</button></div>`;
+    } else {
+      const why = u.install.reason ? `<p class="hint">${esc(u.install.reason)}</p>` : '';
+      const who = isAdmin() ? '' : `<p class="hint">${t('Обновляет администратор.')}</p>`;
+      action = `<p>${t('Способ установки:')} <b>${esc(t(INSTALL_LABEL[u.install.type] || u.install.type))}</b>. ${t('Обновление выполняется командой на сервере:')}</p>
+        ${why}${who}<pre class="code">${esc(u.instructions.commands)}</pre>`;
+    }
+  } else if (!u.error) {
+    action = `<p class="muted">${t('Установлена последняя версия.')}</p>`;
+  }
+  openModal({
+    title: `<h3>${t('Обновление')}</h3><div class="small muted">${t('Репозиторий:')} <a href="${esc(u.releases_url)}" target="_blank" rel="noopener noreferrer">${esc(u.repo)}</a> · ${t('проверено:')} ${u.checked_at ? fmtDate(u.checked_at) : '—'}</div>`,
+    actions: isAdmin() ? `<button class="btn btn-sm" data-act="update-recheck">${t('Проверить сейчас')}</button>` : '',
+    body: head + (u.error ? `<div class="alert alert-error">${esc(u.error)}</div>` : '')
+      + (L && u.available ? `<h4 class="notes-title">${t('Что нового')} <a class="small" href="${esc(L.url)}" target="_blank" rel="noopener noreferrer">${t('на GitHub')}</a>
+          <span class="muted small">${L.published_at ? fmtDate(L.published_at) : ''}</span></h4>
+          <pre class="code notes">${esc(L.notes || t('(описание не заполнено)'))}</pre>` : '')
+      + action,
+  });
+  state.modalHandler = async (act, el) => {
+    if (act === 'update-recheck') {
+      await withBusy(el, t('Проверка…'), async () => { await api('/api/update/check', { method: 'POST' }); });
+      return showUpdate();
+    }
+    if (act === 'update-apply') return applyUpdate(L.version, el);
+  };
+}
+
+async function applyUpdate(version, btn) {
+  let r;
+  try {
+    r = await withBusy(btn, t('Скачивание и проверка…'), () => api('/api/update/apply', { method: 'POST', body: { version } }));
+  } catch (e) { toast(e.message, true); return; }
+  openModal({ title: `<h3>${t('Обновление до')} v${esc(version)}</h3>`, narrow: true, body: `
+    <div class="loading">${icon('loader', 'spin')} ${r.waiting_for_run ? t('Новая версия установлена. Ждём окончания текущего бэкапа, затем перезапуск…') : t('Новая версия установлена. Перезапуск…')}</div>` });
+  const started = Date.now();
+  const poll = async () => {
+    try {
+      const res = await fetch('/healthz', { cache: 'no-store' });
+      const h = await res.json();
+      if (h.version === version || updaterKey(h.version) >= updaterKey(version)) {
+        toast(`${t('Обновлено до')} v${h.version}`);
+        setTimeout(() => location.reload(), 800);
+        return;
+      }
+    } catch { /* сервис перезапускается */ }
+    if (Date.now() - started > 70 * 60 * 1000) {
+      openModal({ title: `<h3>${t('Обновление')}</h3>`, narrow: true, body: errorBody(t('Сервис не вернулся с новой версией. Проверьте journalctl -u mtb.')) });
+      return;
+    }
+    setTimeout(poll, 2000);
+  };
+  setTimeout(poll, 3000);
+}
+
+function updaterKey(v) {           // грубое сравнение: достаточно для «стало не меньше»
+  const m = String(v || '').match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? (+m[1]) * 1e6 + (+m[2]) * 1e3 + (+m[3]) : 0;
 }
 
 /* ================================================================== пользователи */
@@ -975,7 +1106,7 @@ const AUDIT_LABEL = {
   device_delete: t('устройство удалено'), user_create: t('пользователь создан'), user_role: t('смена роли'),
   user_reset_password: t('временный пароль'), user_delete: t('пользователь удалён'), backup_manual: t('ручной бэкап'),
   backup_delete: t('бэкап удалён'), backup_bulk_delete: t('удаление бэкапов'), backup_restore: t('восстановление'),
-  backup_download: t('скачивание'), run_all: t('запуск всех'),
+  backup_download: t('скачивание'), run_all: t('запуск всех'), update_apply: t('обновление'), update_failed: t('ошибка обновления'),
 };
 
 async function loadAudit() {
@@ -995,6 +1126,7 @@ function bindGlobal() {
   $('auth-form').addEventListener('submit', submitAuth);
   for (const id of ['auth-new', 'auth-confirm']) $(id).addEventListener('input', updateRules);
   $('auth-back').onclick = () => setAuthMode('login');
+  $('update-badge').onclick = () => showUpdate();
   $('user-btn').onclick = (e) => { e.stopPropagation(); $('user-menu').classList.toggle('hidden'); };
   document.addEventListener('click', () => $('user-menu').classList.add('hidden'));
   $('user-menu').onclick = (e) => {
