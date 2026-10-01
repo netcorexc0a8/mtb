@@ -32,7 +32,7 @@ from . import __version__
 log = logging.getLogger("mtb.update")
 
 REPO = os.environ.get("MTB_REPO", "netcorexc0a8/mtb")
-API = "https://api.github.com"
+API = os.environ.get("MTB_API_URL", "https://api.github.com").rstrip("/")   # GitHub Enterprise / зеркало
 CHECK_INTERVAL_HOURS = 6
 STATE_KEY = "update_state"
 ARCH = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
@@ -113,6 +113,24 @@ def resolve_channel(channel: str, current: str = __version__) -> bool:
     return is_prerelease(current)          # auto: dev-версия ждёт dev-обновлений
 
 
+def release_info(rel: dict) -> dict:
+    return {
+        "version": rel["tag_name"].lstrip("v"), "tag": rel["tag_name"], "url": rel.get("html_url"),
+        "notes": (rel.get("body") or "")[:20000], "prerelease": bool(rel.get("prerelease")),
+        "published_at": rel.get("published_at"),
+        "assets": {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])},
+    }
+
+
+def find_release(version: str) -> dict:
+    """Релиз по номеру версии (v0.2.3 или 0.2.3)."""
+    tag = "v" + version.strip().lstrip("v")
+    for rel in fetch_releases():
+        if rel.get("tag_name") == tag:
+            return release_info(rel)
+    raise RuntimeError(f"релиз {tag} не найден в {REPO}")
+
+
 def pick_latest(releases: list[dict], include_pre: bool) -> dict | None:
     best = None
     for rel in releases:
@@ -123,14 +141,7 @@ def pick_latest(releases: list[dict], include_pre: bool) -> dict | None:
             continue
         if best is None or version_key(tag) > version_key(best["tag_name"]):
             best = rel
-    if best is None:
-        return None
-    return {
-        "version": best["tag_name"].lstrip("v"), "tag": best["tag_name"], "url": best.get("html_url"),
-        "notes": (best.get("body") or "")[:20000], "prerelease": bool(best.get("prerelease")),
-        "published_at": best.get("published_at"),
-        "assets": {a["name"]: a["browser_download_url"] for a in best.get("assets", [])},
-    }
+    return release_info(best) if best else None
 
 
 def check(db, channel: str) -> dict:
@@ -174,18 +185,29 @@ def _download(url: str, dest: Path) -> str:
 
 
 def apply(latest: dict) -> dict:
-    """Скачивает и подменяет бинарник. Перезапуск — отдельно, через schedule_restart()."""
+    """Обновление из веба: проверки установки, замена бинарника. Перезапуск — schedule_restart()."""
     info = install_info()
     if not info["can_apply"]:
         raise RuntimeError(info.get("reason") or "обновление из веба для этой установки недоступно")
-    asset = f"mtb-linux-{info['arch']}"
+    return install_binary(latest, Path(info["path"]), info["arch"])
+
+
+def install_binary(latest: dict, exe: Path, arch: str, progress=None) -> dict:
+    """Скачать бинарник релиза, сверить SHA256, проверить --version, сохранить .prev, заменить.
+
+    Владелец и права файла сохраняются: при запуске от root бинарник остаётся
+    за пользователем сервиса, и обновление из веба продолжит работать.
+    """
+    say = progress or (lambda msg: None)
+    asset = f"mtb-linux-{arch}"
     assets = latest.get("assets") or {}
     if asset not in assets or "SHA256SUMS" not in assets:
         raise RuntimeError(f"в релизе {latest['tag']} нет {asset} или SHA256SUMS")
 
-    exe = Path(info["path"])
+    st = exe.stat()
     tmp = exe.with_name(f".{exe.name}.new")
     try:
+        say(f"Загрузка {asset} ({latest['tag']})…")
         sums = _session().get(assets["SHA256SUMS"], timeout=30)
         sums.raise_for_status()
         expected = next((ln.split()[0] for ln in sums.text.splitlines()
@@ -195,12 +217,18 @@ def apply(latest: dict) -> dict:
         actual = _download(assets[asset], tmp)
         if actual != expected:
             raise RuntimeError("контрольная сумма не совпала — файл повреждён или подменён")
+        say("Контрольная сумма совпала, проверка запуска…")
         tmp.chmod(0o755)
-        out = subprocess.run([str(tmp), "--version"], capture_output=True, text=True, timeout=60)
+        out = subprocess.run([str(tmp), "--version"], capture_output=True, text=True, timeout=60,
+                             env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"})
         reported = out.stdout.strip().split()[-1] if out.stdout.strip() else ""
         if out.returncode != 0 or version_key(reported) != version_key(latest["version"]):
             raise RuntimeError(f"новый бинарник не запустился или сообщил версию «{reported or out.stderr.strip()[:100]}»")
-        shutil.copy2(exe, exe.with_name(exe.name + ".prev"))
+        prev = exe.with_name(exe.name + ".prev")
+        shutil.copy2(exe, prev)
+        if hasattr(os, "geteuid") and os.geteuid() == 0:      # сохранить владельца (пользователь сервиса)
+            os.chown(tmp, st.st_uid, st.st_gid)
+            os.chown(prev, st.st_uid, st.st_gid)
         os.replace(tmp, exe)
     finally:
         tmp.unlink(missing_ok=True)

@@ -8,6 +8,7 @@
   mtb probe [-d NAME]        какой транспорт файлов работает (sftp / api / ssh)
   mtb fingerprint HOST[:PORT]
   mtb reset-password [USER]  пароль будет задан заново при следующем входе
+  mtb update [--check] [-y]  обновить бинарник до нового релиза с GitHub
 """
 from __future__ import annotations
 
@@ -150,6 +151,132 @@ def cmd_fingerprint(target: str) -> None:
     print(info["pem"], end="")
 
 
+EXIT_UPDATE_AVAILABLE = 3
+
+
+def _service_health(timeout: float = 3) -> dict | None:
+    """Состояние запущенного сервиса через /healthz (идёт ли прогон, версия)."""
+    import json
+    import ssl
+    import urllib.request
+    host, _, port = os.environ.get("WEB_LISTEN", "0.0.0.0:8080").rpartition(":")
+    host = host.strip("[]")
+    host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    scheme = "https" if os.environ.get("WEB_TLS_CERT") else "http"
+    ctx = ssl._create_unverified_context() if scheme == "https" else None   # свой же сервис на localhost
+    try:
+        with urllib.request.urlopen(f"{scheme}://{host}:{port or 8080}/healthz", timeout=timeout, context=ctx) as r:
+            return json.loads(r.read())
+    except Exception:  # noqa: BLE001 — сервис не запущен или недоступен
+        return None
+
+
+def cmd_update(args) -> int:
+    import subprocess
+    import time
+
+    from . import updater
+
+    logging.getLogger("mtb.update").setLevel(logging.ERROR)    # всё нужное команда печатает сама
+    info = updater.install_info()
+    if info["type"] != "binary":
+        print(f"Обновление командой доступно для бинарника из install.sh, а это установка «{info['type']}».")
+        print("Обновите так:\n" + updater.instructions(info, None)["commands"])
+        return 1
+    if not info.get("arch"):
+        print(f"Архитектура {os.uname().machine} не поддерживается")
+        return 1
+    exe = Path(info["path"])
+    is_root = hasattr(os, "geteuid") and os.geteuid() == 0
+    if not args.check and not (os.access(exe, os.W_OK) and os.access(exe.parent, os.W_OK)):
+        print(f"Нет прав на запись в {exe.parent}. Запустите от root или от пользователя сервиса.")
+        return 1
+
+    # что ставить
+    try:
+        if args.version:
+            target = updater.find_release(args.version)
+        else:
+            include_pre = True if args.pre else False if args.stable else updater.resolve_channel("auto")
+            target = updater.pick_latest(updater.fetch_releases(), include_pre)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Не удалось выбрать релиз: {exc}")
+        return 1
+    current = __version__
+    if not target:
+        print(f"Установлена v{current}. Подходящих релизов в {updater.REPO} нет.")
+        return 0
+    newer = updater.version_key(target["version"]) > updater.version_key(current)
+    same = updater.version_key(target["version"]) == updater.version_key(current)
+    label = " (пре-релиз)" if target["prerelease"] else ""
+    if same and not args.version:
+        print(f"Установлена последняя версия: v{current}.")
+        return 0
+    if not newer and not args.version:
+        print(f"Установлена v{current}, последняя подходящая — v{target['version']}{label}. Обновлять нечего.")
+        return 0
+    print(f"Установлена: v{current}")
+    print(f"{'Доступна' if newer else 'Выбрана'}:  v{target['version']}{label}  {target.get('url') or ''}")
+    if target.get("notes") and not args.yes:
+        notes = target["notes"].strip().splitlines()
+        print("\n".join("  " + ln for ln in notes[:15]) + ("\n  …" if len(notes) > 15 else ""))
+    if args.check:
+        return EXIT_UPDATE_AVAILABLE if newer else 0
+    if same:
+        print("Эта версия уже установлена — будет переустановлена.")
+    elif not newer:
+        print("Внимание: это откат на более старую версию. Схема базы назад не откатывается.")
+
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Нет терминала для подтверждения — добавьте -y.")
+            return 1
+        if input(f"Обновить до v{target['version']}? [y/N] ").strip().lower() not in ("y", "yes", "д", "да"):
+            print("Отменено.")
+            return 1
+
+    # не прерывать идущий бэкап
+    health = _service_health()
+    if health and health.get("running") and not args.force:
+        print("Идёт бэкап — ждём его окончания (Ctrl+C — прервать, --force — не ждать)…", flush=True)
+        deadline = time.monotonic() + 3600
+        while (h := _service_health()) and h.get("running") and time.monotonic() < deadline:
+            time.sleep(5)
+
+    try:
+        res = updater.install_binary(target, exe, info["arch"], progress=lambda m: print(m, flush=True))
+    except Exception as exc:  # noqa: BLE001
+        print(f"Обновление не выполнено: {exc}")
+        return 1
+    print(f"Бинарник обновлён: v{res['from']} → v{res['to']} ({exe}). Предыдущий — {exe}.prev")
+
+    # перезапуск сервиса
+    unit = os.environ.get("MTB_SERVICE", "mtb.service")
+    has_systemd = Path("/run/systemd/system").is_dir() and shutil_which("systemctl")
+    active = has_systemd and subprocess.run(["systemctl", "is-active", "--quiet", unit]).returncode == 0
+    if not active:
+        print("Сервис не запущен через systemd — новая версия начнёт работать при следующем запуске.")
+        return 0
+    if not is_root:
+        print(f"Перезапустите сервис: systemctl restart {unit}")
+        return 0
+    subprocess.run(["systemctl", "restart", unit], check=False)
+    for _ in range(30):
+        time.sleep(1)
+        h = _service_health()
+        if h and h.get("version") == res["to"]:
+            print(f"Сервис перезапущен, работает v{h['version']}.")
+            return 0
+    print(f"Сервис перезапущен, но не ответил с новой версией. Проверьте: journalctl -u {unit} -e")
+    print(f"Откат: mv {exe}.prev {exe} && systemctl restart {unit}")
+    return 1
+
+
+def shutil_which(cmd: str) -> bool:
+    import shutil
+    return shutil.which(cmd) is not None
+
+
 def cmd_reset_password(ctx: Context, username: str) -> None:
     from .auth import ensure_admin, reset_password
     ensure_admin(ctx.db)
@@ -240,6 +367,14 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--no-sftp", action="store_true", help="не использовать SFTP как эталон")
     f = sub.add_parser("fingerprint", help="показать отпечаток TLS-сертификата api-ssl")
     f.add_argument("target", metavar="HOST[:PORT]")
+    up = sub.add_parser("update", parents=[common], help="обновить бинарник до нового релиза с GitHub")
+    up.add_argument("--check", action="store_true", help="только проверить (код выхода 3 — есть обновление)")
+    up.add_argument("-y", "--yes", action="store_true", help="не спрашивать подтверждение")
+    up.add_argument("--version", metavar="vX.Y.Z", help="конкретная версия, в том числе более старая")
+    ch = up.add_mutually_exclusive_group()
+    ch.add_argument("--pre", action="store_true", help="учитывать пре-релизы")
+    ch.add_argument("--stable", action="store_true", help="только стабильные версии")
+    up.add_argument("--force", action="store_true", help="не ждать окончания идущего бэкапа")
     rp = sub.add_parser("reset-password", parents=[common],
                         help="сбросить пароль: новый задаётся при следующем входе")
     rp.add_argument("username", nargs="?", default="admin")
@@ -262,6 +397,8 @@ def main() -> None:
         return
 
     _load_env_file(getattr(args, "env_file", None))
+    if cmd == "update":                     # от root: заменить бинарник и перезапустить сервис; базу не трогает
+        sys.exit(cmd_update(args))
     _drop_root(config.load_bootstrap(getattr(args, "data_dir", None)))
     try:
         ctx = Context(getattr(args, "data_dir", None))

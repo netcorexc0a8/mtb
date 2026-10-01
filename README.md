@@ -433,6 +433,8 @@ mtb [--data-dir DIR] [-e ENV_FILE] [--log-level LEVEL] [COMMAND]
                           test which file transport works
   fingerprint HOST[:PORT] fingerprint, expiry and PEM of the API-SSL certificate
   reset-password [USER]   reset a password (admin by default)
+  update [--check] [-y] [--version vX.Y.Z] [--pre | --stable] [--force]
+                          update the binary to a new GitHub release
   -V, --version
 ```
 
@@ -518,6 +520,18 @@ The page waits for the restart and reloads itself. Every update and every failed
 ```bash
 mv /opt/mtb/bin/mtb.prev /opt/mtb/bin/mtb && systemctl restart mtb
 ```
+
+**From the console**, `mtb update` (for `install.sh` installations):
+
+```bash
+mtb update --check                 # check only: exit code 0 — up to date, 3 — update available
+mtb update                         # show what's new and update (asks for confirmation)
+mtb update -y                      # no prompt — for cron and scripts
+mtb update --version v0.2.3 -y     # a specific version, including a rollback
+mtb update --pre                   # consider pre-releases (--stable — stable only)
+```
+
+The command does the same as the web button: downloads the binary, verifies SHA256, checks `--version`, keeps `mtb.prev` and replaces the file. If a backup is running, it waits for it to finish (`--force` skips the wait). Run as root, it restarts the service via `systemctl` and checks that it came back with the new version; the file owner (`mtb`) is preserved. The default channel is "auto": pre-releases are offered only if a pre-release is installed. For GitHub Enterprise or a mirror, set `MTB_API_URL`.
 
 **Other installation methods.** For these, the update dialog shows a ready-to-run command:
 

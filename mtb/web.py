@@ -178,7 +178,8 @@ class WebApp:
     @route("GET", "/healthz", role=None)
     def healthz(self, req: Request):
         row = self.db.one("SELECT MAX(finished_at) AS t FROM runs WHERE kind='scheduled' AND failed='{}'")
-        return {"ok": True, "version": __version__, "last_success": row["t"] if row else None}
+        return {"ok": True, "version": __version__, "running": RUN_LOCK.locked(),
+                "last_success": row["t"] if row else None}
 
     @route("GET", "/api/me")
     def me(self, req: Request):
