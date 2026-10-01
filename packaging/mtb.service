@@ -1,31 +1,33 @@
+# Всё приложение — в одном каталоге /opt/mtb (install.sh подставляет свой, если задан MTB_DIR).
+# systemd подключает этот файл ссылкой: systemctl link /opt/mtb/mtb.service
 [Unit]
 Description=mtb: MikroTik config and certificate backup
 Documentation=https://github.com/netcorexc0a8/mtb/blob/main/README.ru.md
 After=network-online.target
 Wants=network-online.target
+RequiresMountsFor=/opt/mtb
 
 [Service]
 Type=simple
 User=mtb
 Group=mtb
-WorkingDirectory=/var/lib/mtb
-Environment=BACKUP_DIR=/var/lib/mtb/backups
-Environment=DATA_DIR=/var/lib/mtb/data
+WorkingDirectory=/opt/mtb
+Environment=DATA_DIR=/opt/mtb/data
+Environment=BACKUP_DIR=/opt/mtb/backups
 Environment=WEB_LISTEN=0.0.0.0:8080
 # Необязательные переопределения (WEB_LISTEN, WEB_TLS_*, WEB_COOKIE_SECURE, LOG_LEVEL)
-EnvironmentFile=-/etc/mtb/mtb.env
-ExecStart=/opt/mtb/mtb serve
+EnvironmentFile=-/opt/mtb/mtb.env
+ExecStart=/opt/mtb/bin/mtb serve
 # always: после обновления из веба сервис завершается и поднимается с новым бинарником
 Restart=always
 RestartSec=5
 
-# Ограничения
+# Ограничения: писать можно только в свои каталоги; bin/ — для обновления из веба
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-# /opt/mtb — чтобы сервис мог обновить свой бинарник из веб-интерфейса
-ReadWritePaths=/var/lib/mtb /opt/mtb
+ReadWritePaths=/opt/mtb/bin /opt/mtb/data /opt/mtb/backups
 UMask=0077
 
 [Install]

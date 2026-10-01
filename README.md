@@ -66,7 +66,7 @@ PUID=$(id -u) PGID=$(id -g) docker compose up -d
 **Linux binary (systemd):**
 
 ```bash
-curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh | sudo sh
+curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh | sh
 ```
 
 Then:
@@ -181,19 +181,50 @@ The minimal set of policies depends on the mode, and the device's "Check access"
 
 The binary is self-contained and runs on glibc 2.28 or newer: Debian 10+, Ubuntu 20.04+, Astra Linux 1.7+, RHEL/Alma 8+. The host needs `git` for git storage and Gitea push.
 
+Run as root (with `sudo` if you are not root):
+
 ```bash
-curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh | sudo sh
-# a specific version:
-curl -fsSLO https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh && sudo sh install.sh v0.1.0
+curl -fsSL https://github.com/netcorexc0a8/mtb/releases/latest/download/install.sh | sh
+# a specific version (including a pre-release):
+curl -fsSL https://github.com/netcorexc0a8/mtb/releases/download/v0.2.2/install.sh | sh -s v0.2.2
 ```
+
+The whole application is installed into a single directory, `/opt/mtb`, the standard Linux location for self-contained packages:
+
+```
+/opt/mtb/
+├── bin/mtb        # binary; mtb.prev is the previous version after a web update
+├── mtb.env        # optional startup variables
+├── mtb.service    # systemd unit, attached with a link (systemctl link)
+├── data/          # SQLite database, secret encryption key, known_hosts
+└── backups/       # backups
+```
+
+Outside it there are only links: `/usr/local/bin/mtb` and the unit in `/etc/systemd/system`. Backing up the whole installation means copying `/opt/mtb`.
 
 What the script does:
 
-- verifies the binary against `SHA256SUMS` and installs it to `/opt/mtb/mtb`, with a `/usr/local/bin/mtb` link. The file is owned by the service user so that mtb can update itself from the web UI;
-- creates the `mtb` system user and `/var/lib/mtb/{data,backups}` with mode 0700;
-- installs and starts `mtb.service`.
+- detects the architecture (amd64 or arm64), verifies the binary against `SHA256SUMS` and test-runs it;
+- creates the `mtb` system user;
+- lays out the directory: the root and `mtb.env` are owned by root; `bin/`, `data/` and `backups/` by the service user (`bin/` so that mtb can update itself from the web UI);
+- attaches and starts `mtb.service`. Running it again updates the binary and restarts the service, leaving the data alone.
 
-Optional startup variables go in `/etc/mtb/mtb.env`. Logs: `journalctl -u mtb -f`.
+Script variables:
+
+| Variable | Purpose |
+|---|---|
+| `MTB_DIR` | Install directory instead of `/opt/mtb`. |
+| `MTB_BASE_URL` | Release mirror for air-gapped networks: a directory with `mtb-linux-<arch>`, `SHA256SUMS`, `mtb.service`, `mtb.env.example`. |
+| `MTB_REPO` | Another GitHub repository. |
+
+Uninstall:
+
+```bash
+sh install.sh --uninstall              # stop and disable the service; data stays in /opt/mtb
+rm -rf /opt/mtb && userdel mtb         # remove completely
+```
+
+Logs: `journalctl -u mtb -f`.
 
 **Manually, in any folder:**
 
@@ -405,11 +436,7 @@ mtb [--data-dir DIR] [-e ENV_FILE] [--log-level LEVEL] [COMMAND]
   -V, --version
 ```
 
-Commands use the same database as the service, so pass the same `DATA_DIR`. Under systemd:
-
-```bash
-sudo -u mtb env DATA_DIR=/var/lib/mtb/data mtb check
-```
+With an `install.sh` installation, commands find `/opt/mtb/data` by themselves: just run the command, for example `mtb check`. If you run it as root, it executes as the `mtb` user who owns the data; otherwise the database files would become owned by root and the service could no longer write to them. For other installations, pass the same `DATA_DIR` as the service uses.
 
 In Docker: `docker compose exec mtb mtb check`.
 
@@ -452,12 +479,12 @@ If restore is enabled in the settings, the "Restore" button in the backup list u
 - **The audit log** records logins, failed attempts, changes, downloads, deletions and restores.
 - **Expose the UI only over HTTPS:** a reverse proxy with `WEB_COOKIE_SECURE=true`, or `WEB_TLS_CERT` / `WEB_TLS_KEY`.
 - **The router `backup` user:** restrict it by source address, and restrict services with `address=`. Do not disable TLS verification: this account has the `sensitive` and `write` policies.
-- **Self-update.** The binary in `/opt/mtb` is owned by the service user, otherwise updating from the web UI would be impossible. A new file is accepted only with a matching SHA256 from the release and after a `--version` check. If you don't want this, make root the owner (`chown root: /opt/mtb /opt/mtb/mtb`): the UI will then only show the update command.
+- **Self-update.** The `/opt/mtb/bin` directory is owned by the service user, otherwise updating from the web UI would be impossible. A new file is accepted only with a matching SHA256 from the release and after a `--version` check. If you don't want this, make root the owner (`chown -R root: /opt/mtb/bin`): the UI will then only show the update command.
 - **The router's SSH host key** is remembered on first connection. If the key changes later, the connection is refused.
 
 ## Backing up mtb itself
 
-Save the whole `DATA_DIR`: `mtb.db` and `secret.key` **together**. Keep the backup passphrase separately, for example in a password manager: without it, `.backup` and certificates cannot be restored.
+Save the whole `DATA_DIR` (`/opt/mtb/data` with `install.sh`): `mtb.db` and `secret.key` **together**. The simplest option is to copy all of `/opt/mtb`: data, backups and startup settings are all there. Keep the backup passphrase separately, for example in a password manager: without it, `.backup` and certificates cannot be restored.
 
 For a live copy, use `sqlite3 mtb.db ".backup copy.db"`, or stop the service first.
 
@@ -481,7 +508,7 @@ In air-gapped networks you can turn the check off. The service needs access to `
 
 1. downloads `mtb-linux-<arch>` and `SHA256SUMS` for that release and verifies the checksum;
 2. runs the new file with `--version` to confirm it is the expected version;
-3. keeps the current binary as `/opt/mtb/mtb.prev` and atomically replaces it;
+3. keeps the current binary as `/opt/mtb/bin/mtb.prev` and atomically replaces it;
 4. waits for any running backup to finish and exits, after which systemd starts the service with the new version.
 
 The page waits for the restart and reloads itself. Every update and every failed attempt is recorded in the audit log.
@@ -489,7 +516,7 @@ The page waits for the restart and reloads itself. Every update and every failed
 **Rollback:**
 
 ```bash
-mv /opt/mtb/mtb.prev /opt/mtb/mtb && systemctl restart mtb
+mv /opt/mtb/bin/mtb.prev /opt/mtb/bin/mtb && systemctl restart mtb
 ```
 
 **Other installation methods.** For these, the update dialog shows a ready-to-run command:
@@ -506,7 +533,7 @@ The database schema is migrated automatically on start.
 
 | Symptom | Fix |
 |---|---|
-| Lost the `admin` password | `mtb reset-password admin` with the same `DATA_DIR`. On the next login you will be asked to set a new one. |
+| Lost the `admin` password | `mtb reset-password admin` on the server. On the next login you will be asked to set a new one. |
 | The login form reappears right after logging in | The UI is opened over HTTP while `WEB_COOKIE_SECURE=true`. Use HTTPS or remove the variable. |
 | "Too many attempts" | 10 failed logins in 15 minutes. Wait, or restart the service. |
 | `не удалось расшифровать секрет` in the server log | The database was copied without its `secret.key`. Restore the key or re-enter the passwords. |

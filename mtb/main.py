@@ -163,11 +163,58 @@ def cmd_reset_password(ctx: Context, username: str) -> None:
 
 def _load_env_file(explicit: str | None) -> None:
     from dotenv import load_dotenv
-    path = explicit or os.environ.get("MTB_ENV") or ".env"
-    if Path(path).is_file():
-        load_dotenv(path, override=False)
-    elif explicit:
-        raise SystemExit(f"env-файл не найден: {path}")
+    candidates = [explicit or os.environ.get("MTB_ENV") or ".env"]
+    base = config.install_base()
+    if not explicit and base:
+        candidates.append(str(base / "mtb.env"))        # установка через install.sh
+    for path in candidates:
+        try:
+            found = Path(path).is_file()
+        except OSError:                     # текущий каталог недоступен пользователю сервиса
+            found = False
+        if found:
+            load_dotenv(path, override=False)
+            return
+    if explicit:
+        raise SystemExit(f"env-файл не найден: {explicit}")
+
+
+def _drop_root(boot: config.Bootstrap) -> None:
+    """Команда запущена от root — выполнить её от имени владельца данных.
+
+    Иначе SQLite создаст рядом с базой файлы -wal/-shm от root, и сервис
+    (пользователь mtb) не сможет писать в базу. Команда перезапускается
+    отдельным процессом: бинарник PyInstaller распаковывает модули в каталог,
+    доступный только root, поэтому сменить пользователя «на ходу» нельзя.
+    """
+    if not hasattr(os, "geteuid") or os.geteuid() != 0 or os.environ.get("MTB_AS_OWNER"):
+        return
+    data_dir = boot.data_dir.resolve()
+    if not data_dir.is_dir():
+        return
+    st = data_dir.stat()
+    if st.st_uid == 0:
+        return
+    import pwd
+    import subprocess
+    try:
+        pw = pwd.getpwuid(st.st_uid)
+        home, user = pw.pw_dir, pw.pw_name
+    except KeyError:
+        home, user = str(data_dir.parent), str(st.st_uid)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEIPASS"))}
+    env.update({"MTB_AS_OWNER": "1", "HOME": home, "USER": user,
+                "DATA_DIR": str(data_dir), "BACKUP_DIR": str(boot.backup_dir.resolve()),
+                # новый экземпляр PyInstaller распакуется сам, а не возьмёт каталог родителя (он доступен только root)
+                "PYINSTALLER_RESET_ENVIRONMENT": "1"})
+    cmd = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, "-m", "mtb", *sys.argv[1:]]
+    log.debug("Команда выполняется от пользователя %s", user)
+    try:
+        rc = subprocess.run(cmd, user=st.st_uid, group=st.st_gid, extra_groups=[], env=env,
+                            cwd=str(data_dir.parent)).returncode
+    except KeyboardInterrupt:
+        rc = 130
+    sys.exit(rc)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -215,6 +262,7 @@ def main() -> None:
         return
 
     _load_env_file(getattr(args, "env_file", None))
+    _drop_root(config.load_bootstrap(getattr(args, "data_dir", None)))
     try:
         ctx = Context(getattr(args, "data_dir", None))
         only = getattr(args, "device", None)

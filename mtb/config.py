@@ -51,12 +51,27 @@ class Bootstrap:
         return self.data_dir / "mtb.db"
 
 
+def install_base() -> Path | None:
+    """Каталог установки, если это бинарник из install.sh: <база>/bin/mtb → <база>.
+
+    Тогда data/ и backups/ ищутся рядом, и команды CLI работают без переменных
+    окружения: `mtb check`, `mtb reset-password admin`.
+    """
+    import sys
+    if not getattr(sys, "frozen", False):
+        return None
+    exe = Path(sys.executable).resolve()
+    base = exe.parent.parent
+    return base if exe.parent.name == "bin" and (base / "data").is_dir() else None
+
+
 def load_bootstrap(data_dir: str | None = None) -> Bootstrap:
     cert = os.environ.get("WEB_TLS_CERT") or None
     secure = os.environ.get("WEB_COOKIE_SECURE", "auto").lower()
+    base = install_base()
     return Bootstrap(
-        data_dir=Path(data_dir or os.environ.get("DATA_DIR", "data")),
-        backup_dir=Path(os.environ.get("BACKUP_DIR", "backups")),
+        data_dir=Path(data_dir or os.environ.get("DATA_DIR") or (base / "data" if base else "data")),
+        backup_dir=Path(os.environ.get("BACKUP_DIR") or (base / "backups" if base else "backups")),
         web_listen=os.environ.get("WEB_LISTEN", "0.0.0.0:8080"),
         web_tls_cert=cert,
         web_tls_key=os.environ.get("WEB_TLS_KEY") or None,
