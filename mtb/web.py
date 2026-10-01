@@ -184,6 +184,8 @@ class WebApp:
     def me(self, req: Request):
         s = self.settings()
         cat = Catalog(s, self.db)
+        if req.user["lang"]:
+            req.h.set_lang = req.user["lang"]
         return {"user": req.username, "role": req.user["role"], "can_write": req.user["role"] == "admin",
                 "lang": req.user["lang"],
                 "version": __version__, "timezone": s.timezone, "mode": cat.mode, "restore": s.web_restore,
@@ -199,6 +201,7 @@ class WebApp:
             raise ApiError(400, "Язык — ru или en")
         with self.db.tx() as c:
             c.execute("UPDATE users SET lang=? WHERE id=?", (lang, req.user["id"]))
+        req.h.set_lang = lang
         return {"ok": True, "lang": lang}
 
     @route("POST", "/api/me/password")
@@ -490,8 +493,10 @@ class WebApp:
         v = config.read_settings(self.db, self.box)
         tz = ZoneInfo(v["timezone"])
         nxt = CronTrigger.from_crontab(v["schedule"], timezone=tz).get_next_fire_time(None, datetime.now(tz))
+        from .notify import PRESETS, TEMPLATE_VARS
         return {"settings": config.settings_public(v), "next_run": nxt.isoformat() if nxt else None,
-                "cookie_secure": self.boot.web_cookie_secure}
+                "cookie_secure": self.boot.web_cookie_secure,
+                "telegram": {"presets": PRESETS, "vars": list(TEMPLATE_VARS)}}
 
     @route("GET", "/api/settings", role="admin")
     def settings_get(self, req: Request):
@@ -506,14 +511,25 @@ class WebApp:
                 self.on_settings_changed()
         return {"ok": True, "changed": changed, **self._settings_payload()}
 
+    @route("POST", "/api/settings/telegram-preview", role="admin")
+    def settings_telegram_preview(self, req: Request):
+        from .notify import PRESETS, render, sample_context, template_unknown_vars
+        lang = str(req.body.get("lang") or "en")
+        lang = lang if lang in PRESETS else "en"
+        template = str(req.body.get("template") or "") or PRESETS[lang]["detailed"]
+        return {"text": render(template, sample_context(lang, __version__)),
+                "unknown": template_unknown_vars(template)}
+
     @route("POST", "/api/settings/test-telegram", role="admin")
     def settings_test_telegram(self, req: Request):
+        from .notify import PRESETS, render, sample_context
         s = self.settings()
         if not (s.tg_token and s.tg_chat):
             raise ApiError(400, "Сначала сохраните токен бота и chat_id")
+        text = render(s.telegram_template or PRESETS[s.notify_lang]["detailed"], sample_context(s.notify_lang, __version__))
+        note = "test message, sample data" if s.notify_lang == "en" else "тестовое сообщение, пример данных"
         try:
-            telegram_send(s.tg_token, s.tg_chat,
-                          translate(f"✅ mtb: проверка уведомлений ({req.username})", s.notify_lang))
+            telegram_send(s.tg_token, s.tg_chat, f"{text}\n\n({note} · {req.username})")
         except Exception as exc:  # noqa: BLE001
             raise ApiError(502, str(exc)) from exc
         return {"ok": True}
@@ -692,6 +708,7 @@ class _Handler(BaseHTTPRequestHandler):
     sys_version = ""
     new_session: str | None = None
     clear_session: bool = False
+    set_lang: str | None = None
 
     def log_message(self, fmt, *args):
         log.debug("%s %s", self.address_string(), fmt % args)
@@ -700,6 +717,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _cookie_headers(self) -> dict:
         secure = "; Secure" if self.app.boot.web_cookie_secure else ""
+        if self.set_lang:            # язык интерфейса — не секрет, читается из JS
+            return {"Set-Cookie": f"mtb_lang={self.set_lang}; Path=/; SameSite=Strict; Max-Age=31536000{secure}"}
         if self.new_session:
             return {"Set-Cookie": f"{COOKIE}={self.new_session}; Path=/; HttpOnly; SameSite=Strict; "
                                   f"Max-Age={auth.SESSION_TTL}{secure}"}

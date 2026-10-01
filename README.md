@@ -291,9 +291,41 @@ The **Settings** section, admins only.
 | Schedule | Cron expression (default `0 3 * * *`), time zone, how many devices to poll in parallel. Shows the next run time. |
 | Storage and encryption | Passphrase for `.backup` and certificates. Mode: git or snapshots. For git: whether to keep history. For snapshots: retention, minimum kept, "only on changes". |
 | Gitea | Repository URL, user, token, branch, commit author, CA in PEM, disabling TLS verification. |
-| Telegram | Bot token, `chat_id`, notification language (English or Russian), "send a test message" button. |
+| Telegram | Bot token, `chat_id`, notification language, when to send, and the message template. See [Telegram messages](#telegram-messages). |
 | Updates | Whether to check GitHub for new versions, and the channel: auto, stable only, or including pre-releases. "Check now" button. See [Upgrading](#upgrading). |
 | Web interface | Allow restore (`/import`) from the backup list. Off by default. |
+
+### Telegram messages
+
+Under **Settings → Telegram notifications** you set:
+
+- **When to send:** on errors and changes (default), on errors only, or after every run.
+- **Notification language:** English (default) or Russian.
+- **Template:** a preset ("Detailed", "Short", "Errors only") or your own text, with a live preview on sample data.
+
+Lines whose variables turn out empty (for example `{changes}` when nothing changed) are not sent. The text is sent as is, without Markdown. "Send a test message" sends the saved template with sample data.
+
+| Variable | Value |
+|---|---|
+| `{icon}` | ✅ success, ⚠️ errors or warnings, ❌ all failed |
+| `{title}` | `mtb` or "manual backup" |
+| `{kind}` | scheduled / manual |
+| `{date}`, `{time}` | run date and time |
+| `{ok}`, `{total}` | devices succeeded / total |
+| `{failed_count}`, `{changed_count}` | devices failed / changed |
+| `{devices}` | devices in the run |
+| `{changes}` | a "Changes: core-rtr1 (config); …" line, or empty |
+| `{errors}` | errors, one line per device: `• rtr2: TimeoutError: …` |
+| `{warnings}` | warnings (for example, about Gitea push) |
+| `{version}` | mtb version |
+
+Example of a custom template:
+
+```text
+{icon} MikroTik backup for {date}: {ok} of {total}
+{changes}
+{errors}
+```
 
 Secrets (the passphrase and tokens) are never sent back to the UI; you only see "set" or "not set". Leaving the field empty on save keeps the current value, and the "delete" checkbox clears it.
 

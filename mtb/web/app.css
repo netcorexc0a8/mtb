@@ -211,3 +211,26 @@ tbody.static tr { cursor: default; }
 pre.notes { max-height: 280px; overflow: auto; margin-bottom: 12px; }
 code { font-family: var(--mono); font-size: 12px; }
 .modal a:not(.icon-btn):not(.file-chip):not(.btn) { color: var(--accent); }
+
+/* ---------- настройки: секции в одну колонку, описание слева */
+.settings-stack { display: flex; flex-direction: column; gap: 14px; }
+.set-section { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 10px 28px; padding: 18px 20px !important; }
+.set-head h3 { margin: 0 0 6px; }
+.set-head .hint { margin: 0; font-size: 12px; line-height: 1.45; }
+@media (max-width: 860px) { .set-section { grid-template-columns: 1fr; } }
+.label-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- чекбокс с подписью в две строки: пояснение под текстом, а не под галкой */
+.check2 { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; align-content: start; }
+.check2 > input { grid-row: 1; }
+.check2 > span:not(.hint) { grid-column: 2; }
+.check2 > .hint { grid-column: 2; }
+
+/* ---------- шаблон Telegram */
+.tg-template { min-height: 110px; }
+.var-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.var-chip { font: 12px var(--mono); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); cursor: pointer; }
+.var-chip:hover { border-color: var(--accent); color: var(--accent); }
+.tg-preview { margin-top: 6px; min-height: 48px; white-space: pre-wrap; }
+.set-section .form-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.wide-select select { max-width: 460px; }

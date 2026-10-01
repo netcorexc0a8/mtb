@@ -293,6 +293,8 @@ SETTINGS_SPEC: dict[str, tuple[type, object, bool]] = {
     "telegram_chat": (str, "", False),
     "web_restore": (bool, False, False),
     "notify_lang": (str, "en", False),
+    "notify_when": (str, "changes", False),
+    "telegram_template": (str, "", False),
     "update_check": (bool, True, False),
     "update_channel": (str, "auto", False),
 }
@@ -364,6 +366,14 @@ def validate_settings(v: dict) -> None:
         raise ConfigError("CA Gitea должен быть в формате PEM")
     if v["update_channel"] not in ("auto", "stable", "prerelease"):
         raise ConfigError("Канал обновлений — auto, stable или prerelease")
+    if v["notify_when"] not in ("changes", "errors", "always"):
+        raise ConfigError("Когда отправлять — changes, errors или always")
+    if len(v["telegram_template"]) > 3000:
+        raise ConfigError("Шаблон сообщения — не длиннее 3000 символов")
+    from .notify import template_unknown_vars
+    unknown = template_unknown_vars(v["telegram_template"])
+    if unknown:
+        raise ConfigError("Неизвестные переменные в шаблоне: " + ", ".join("{" + u + "}" for u in unknown))
     if v["notify_lang"] not in ("ru", "en"):
         raise ConfigError("Язык уведомлений — ru или en")
     if bool(v["telegram_token"]) != bool(v["telegram_chat"]):
@@ -397,7 +407,9 @@ class Settings:
     tg_token: str | None
     tg_chat: str | None
     web_restore: bool = False
-    notify_lang: str = "ru"
+    notify_lang: str = "en"
+    notify_when: str = "changes"
+    telegram_template: str = ""
     web_listen: str = "0.0.0.0:8080"
     web_tls_cert: str | None = None
     web_tls_key: str | None = None
@@ -427,7 +439,8 @@ def load(boot: Bootstrap, db: Database, box: SecretBox) -> Settings:
         git_author_name=v["git_author_name"], git_author_email=v["git_author_email"],
         git_ca=git_ca, git_insecure=v["gitea_insecure"],
         tg_token=v["telegram_token"] or None, tg_chat=v["telegram_chat"] or None,
-        web_restore=v["web_restore"], notify_lang=v["notify_lang"], web_listen=boot.web_listen,
+        web_restore=v["web_restore"], notify_lang=v["notify_lang"], notify_when=v["notify_when"],
+        telegram_template=v["telegram_template"], web_listen=boot.web_listen,
         web_tls_cert=boot.web_tls_cert, web_tls_key=boot.web_tls_key,
         web_cookie_secure=boot.web_cookie_secure,
         aliases=load_aliases(db),

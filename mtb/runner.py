@@ -13,7 +13,8 @@ from zoneinfo import ZoneInfo
 from . import config
 from .mikrotik import backup_device
 from .i18n import translate
-from .notify import telegram
+from . import __version__
+from .notify import PRESETS, render, report_context, should_notify, telegram
 from .storage import make_storage
 
 log = logging.getLogger("mtb")
@@ -134,22 +135,15 @@ def _run(s, devices, kind, notes, notify) -> RunResult:
         log.error("Ошибка push в Gitea: %s", exc)
         result.warnings.append(f"push в Gitea: {exc}")
 
-    icon = "✅" if not (result.failed or result.warnings) else ("⚠️" if result.ok else "❌")
-    title = "ручной бэкап" if manual else "mtb"
-    report = [f"{icon} {title} {started:%d.%m %H:%M}: {len(result.ok)}/{len(devices)} успешно"]
-    if result.changed:
-        report.append("Изменения: " + "; ".join(
-            f"{n} ({', '.join(c)})" for n, c in sorted(result.changed.items())))
-    for n, e in sorted(result.failed.items()):
-        report.append(f"• {n}: {e}")
-    for w in result.warnings:
-        report.append(f"• {w}")
-    text = "\n".join(report)
-    log.info(text.replace("\n", " | "))
-
-    # Уведомляем при ошибках или изменениях; «всё без изменений» — только в лог
-    if notify and (result.failed or result.warnings or result.changed):
-        telegram(s.tg_token, s.tg_chat, translate(text, s.notify_lang))
+    log.info("Прогон %s: успешно %d/%d, изменений %d, ошибок %d%s", kind, len(result.ok), len(devices),
+             len(result.changed), len(result.failed),
+             "".join(f" | {n}: {e}" for n, e in sorted(result.failed.items())))
+    if notify and should_notify(s.notify_when, result.failed, result.warnings, result.changed):
+        ctx = report_context(s.notify_lang, kind=kind, started=started, ok=result.ok,
+                             failed={n: translate(e, s.notify_lang) for n, e in result.failed.items()},
+                             changed=result.changed, warnings=translate(result.warnings, s.notify_lang),
+                             devices=[d.name for d in devices], version=__version__)
+        telegram(s.tg_token, s.tg_chat, render(s.telegram_template or PRESETS[s.notify_lang]["detailed"], ctx))
 
     if not result.failed and not manual:
         (s.data_dir / "last_success").write_text(datetime.now(tz).isoformat())

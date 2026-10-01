@@ -205,8 +205,13 @@ async function switchLang(lang) {
 async function start() {
   try { state.me = await api('/api/me'); } catch { return; }
   const me = state.me;
-  // Язык хранится в профиле: в другом браузере или по другому адресу он тот же
-  if (me.lang && me.lang !== LANG) { setLang(me.lang); return; }
+  // Язык хранится в профиле: в другом браузере или по другому адресу он тот же.
+  // Перезагрузка — не больше одного раза, чтобы заблокированное хранилище не зациклило страницу.
+  if (me.lang && me.lang !== LANG) {
+    let tried = null;
+    try { tried = sessionStorage.getItem('mtb-lang-sync'); sessionStorage.setItem('mtb-lang-sync', me.lang); } catch { tried = me.lang; }
+    if (tried !== me.lang) { setLang(me.lang); return; }
+  }
   if (!me.lang) api('/api/me/lang', { method: 'PUT', body: { lang: LANG } }).catch(() => {});
   $('auth').classList.add('hidden'); $('shell').classList.remove('hidden');
   document.body.classList.toggle('is-admin', isAdmin());
@@ -222,7 +227,7 @@ function renderBanners() {
     ? `${t("Устройств пока нет.")} <a href="#/devices">${t("Добавьте первое устройство")}</a>.`
     : t('Устройств пока нет — их добавляет администратор.'));
   if (isAdmin() && !me.passphrase_set) out.push(`${t("Не задан пароль шифрования бэкапов — без него .backup и сертификаты не создаются.")} <a href="#/settings">${t("Настройки → Хранение")}</a>.`);
-  $('banners').innerHTML = out.map((msg) => `<div class="banner">${msg}</div>`).join('');
+  $('banners').innerHTML = out.map((msg) => `<div class="banner"><span>${msg}</span></div>`).join('');
 }
 
 const PAGES = { backups: loadBackups, devices: loadDevices, runs: loadRuns, settings: loadSettings, users: loadUsers, audit: loadAudit };
@@ -610,13 +615,13 @@ function deviceForm(dev) {
       <label class="wide">${t("Заметка")} <input class="input" name="notes" value="${esc(d.notes)}"></label>
       <label class="wide">${t("Прежние имена")} <input class="input" name="aliases" value="${esc((d.aliases || []).join(', '))}" placeholder="rtr1, old-core">
         <span class="hint">${t("Бэкапы и журнал под этими именами показываются у этого устройства. При переименовании старое имя добавляется сюда само.")}</span></label>
-      <label class="check"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}> ${t("Включено в расписание")}</label>
+      <label class="check check2"><input type="checkbox" name="enabled" ${d.enabled ? 'checked' : ''}><span>${t('Включено в расписание')}</span></label>
     </div></fieldset>
     <fieldset><legend>${t("Что и как забирать")}</legend><div class="form-grid">
       <label>${t("Транспорт")} <select class="input" name="transport">
         ${opt('sftp', d.transport, t('API + SFTP (по умолчанию)'))}${opt('api', d.transport, t('Только API-SSL'))}${opt('ssh', d.transport, t('Только SSH'))}</select>
         <span class="hint" data-hint="transport"></span></label>
-      <label class="check"><input type="checkbox" name="config_only" ${d.config_only ? 'checked' : ''}> ${t("Только конфиг (без .backup и сертификатов)")}</label>
+      <label class="check check2"><input type="checkbox" name="config_only" ${d.config_only ? 'checked' : ''}><span>${t('Только конфиг')}</span><span class="hint">${t('(без .backup и сертификатов)')}</span></label>
       <label data-show="api">${t("Бинарные файлы через API")} <select class="input" name="api_binary">
         ${opt('base64', d.api_binary, t('base64 (рекомендуется)'))}${opt('raw', d.api_binary, 'raw')}${opt('skip', d.api_binary, t('не забирать (без .backup)'))}</select></label>
       <label data-show="b64">${t("Размер куска base64")} <input class="input" type="number" name="api_b64_chunk" min="3072" max="32768" step="1024" value="${d.api_b64_chunk}"></label>
@@ -636,7 +641,7 @@ function deviceForm(dev) {
         <button type="button" class="btn btn-sm" data-act="fetch-fp">${icon('key', 'i-sm')} ${t("Получить с устройства")}</button></span>
         <span class="hint" id="fp-info">${t("Сверьте с /certificate print detail на роутере.")}</span></label>
       <label class="wide" data-show="tls-ca">PEM <textarea class="input" name="tls_ca" placeholder="-----BEGIN CERTIFICATE-----">${esc(d.tls_ca || '')}</textarea></label>
-      <label class="check"><input type="checkbox" name="tls_legacy" ${d.tls_legacy ? 'checked' : ''}> ${t("Разрешить слабые ключи (1024 бит)")}</label>
+      <label class="check check2"><input type="checkbox" name="tls_legacy" ${d.tls_legacy ? 'checked' : ''}><span>${t('Разрешить слабые ключи')}</span><span class="hint">${t('(ключ сертификата 1024 бит)')}</span></label>
     </div></fieldset>
     <fieldset><legend>${t("Подключение")}</legend><div class="form-grid">
       <label data-show="tls">${t("Порт API-SSL")} <input class="input" type="number" name="api_port" min="1" max="65535" value="${d.api_port}"></label>
@@ -799,109 +804,162 @@ async function loadSettings() {
 
 function renderSettings(data) {
   const s = data.settings, el = $('page-settings');
-  const secret = (key, label, hint = '') => `<label>${label}
-      <span class="secret-state ${s[key].set ? 'set' : 'unset'}">${s[key].set ? t('● задан') : t('○ не задан')}</span>
+  const presets = data.telegram.presets, tgVars = data.telegram.vars;
+  const hint = (h) => (h ? `<span class="hint">${h}</span>` : '');
+  const secret = (key, label, h = '') => `<label>
+      <span class="label-row">${label} <span class="secret-state ${s[key].set ? 'set' : 'unset'}">${s[key].set ? t('● задан') : t('○ не задан')}</span></span>
       <input class="input" type="password" name="${key}" autocomplete="new-password" placeholder="${s[key].set ? t('оставьте пустым, чтобы не менять') : ''}">
-      ${s[key].set ? `<span class="check hint"><input type="checkbox" data-clear="${key}"> ${t("удалить")}</span>` : ''}
-      ${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
-  const text = (key, label, hint = '', attrs = '') => `<label>${label}<input class="input" name="${key}" value="${esc(s[key])}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
-  const num = (key, label, min, max, hint = '') => `<label>${label}<input class="input" type="number" name="${key}" min="${min}" max="${max}" value="${s[key]}">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
-  const chk = (key, label) => `<label class="check"><input type="checkbox" name="${key}" ${s[key] ? 'checked' : ''}> ${label}</label>`;
-  el.innerHTML = `<div class="page-head"><h1>${t("Настройки")}</h1></div>
-  <form id="settings-form" autocomplete="off"><div class="settings-grid">
-    <section class="card"><h3>${t("Расписание")}</h3><div class="form-grid">
+      ${s[key].set ? `<span class="check hint"><input type="checkbox" data-clear="${key}"> ${t('удалить')}</span>` : ''}${hint(h)}</label>`;
+  const text = (key, label, h = '', attrs = '') => `<label>${label}<input class="input" name="${key}" value="${esc(s[key])}" ${attrs}>${hint(h)}</label>`;
+  const num = (key, label, min, max, h = '') => `<label>${label}<input class="input" type="number" name="${key}" min="${min}" max="${max}" value="${s[key]}">${hint(h)}</label>`;
+  const chk = (key, label, h = '') => `<label class="check check2 wide"><input type="checkbox" name="${key}" ${s[key] ? 'checked' : ''}><span>${label}</span>${hint(h)}</label>`;
+  const sel = (key, label, opts, h = '', cls = '') => `<label class="${cls}">${label}<select class="input" name="${key}">${opts.map(([v, l]) =>
+    `<option value="${v}"${String(s[key]) === v ? ' selected' : ''}>${l}</option>`).join('')}</select>${hint(h)}</label>`;
+  const section = (title, desc, body, attrs = '') => `<section class="card set-section" ${attrs}>
+      <div class="set-head"><h3>${title}</h3>${desc ? `<p class="hint">${desc}</p>` : ''}</div>
+      <div class="form-grid">${body}</div></section>`;
+  const presetOf = (tpl, lang) => Object.keys(presets[lang]).find((k) => presets[lang][k] === tpl) || 'custom';
+  const tplValue = s.telegram_template || presets[s.notify_lang].detailed;
+  const VAR_TITLE = {
+    icon: t('значок: ✅ успешно, ⚠️ есть ошибки, ❌ всё неудачно'), title: t('mtb или «ручной бэкап»'),
+    kind: t('по расписанию / ручной'), date: t('дата прогона'), time: t('время прогона'),
+    ok: t('успешных устройств'), total: t('всего устройств'), failed_count: t('устройств с ошибкой'),
+    changed_count: t('устройств с изменениями'), devices: t('список устройств'),
+    changes: t('строка «Изменения: …» или пусто'), errors: t('ошибки по устройствам, по строке на каждую'),
+    warnings: t('предупреждения (например, push в Gitea)'), version: t('версия mtb'),
+  };
+
+  el.innerHTML = `<div class="page-head"><h1>${t('Настройки')}</h1></div>
+  <form id="settings-form" autocomplete="off"><div class="settings-stack">
+    ${section(t('Расписание'), t('Когда запускать бэкап всех включённых устройств.'), `
       ${text('schedule', t('Cron-выражение'), t('мин час день месяц день_недели. «0 3 * * *» — каждый день в 03:00'), 'required')}
       ${text('timezone', t('Часовой пояс'), t('Например, Europe/Moscow'))}
       ${num('workers', t('Устройств параллельно'), 1, 32)}
-      <div class="wide hint">${t("Следующий запуск:")} <b>${data.next_run ? fmtDate(data.next_run) : '—'}</b></div>
-    </div></section>
+      <div class="wide hint">${t('Следующий запуск:')} <b>${data.next_run ? fmtDate(data.next_run) : '—'}</b></div>`)}
 
-    <section class="card"><h3>${t("Хранение и шифрование")}</h3><div class="form-grid">
+    ${section(t('Хранение и шифрование'), t('Где лежат бэкапы и чем шифруются .backup и сертификаты.'), `
       ${secret('backup_passphrase', t('Пароль шифрования .backup и сертификатов'), t('Храните его отдельно: без него бэкапы не восстановить'))}
-      <label>${t("Режим хранения")} <select class="input" name="storage">
-        <option value="git"${s.storage === 'git' ? ' selected' : ''}>${t("git — текущее состояние + история")}</option>
-        <option value="snapshots"${s.storage === 'snapshots' ? ' selected' : ''}>${t("снимки — папка с датой на каждый прогон")}</option></select></label>
+      ${sel('storage', t('Режим хранения'), [['git', t('git — текущее состояние + история')], ['snapshots', t('снимки — папка с датой на каждый прогон')]], '', 'wide wide-select')}
       <div data-show="git" class="wide">${chk('git_history', t('Вести историю изменений в git'))}</div>
       <div data-show="snapshots">${num('snapshot_retention_days', t('Хранить снимки, дней'), 0, 36500, t('0 — хранить все'))}</div>
       <div data-show="snapshots">${num('snapshot_keep_min', t('Всегда оставлять последних'), 1, 10000)}</div>
-      <div data-show="snapshots" class="wide">${chk('snapshot_on_change', t('Создавать снимок только при изменениях'))}</div>
-    </div></section>
+      <div data-show="snapshots" class="wide">${chk('snapshot_on_change', t('Создавать снимок только при изменениях'))}</div>`)}
 
-    <section class="card" data-show="git"><h3>Gitea <span class="muted small">${t("— необязательно")}</span></h3><div class="form-grid">
-      <label class="wide">${t("URL репозитория")}<input class="input" name="gitea_url" value="${esc(s.gitea_url)}" placeholder="https://gitea.local/netops/mikrotik-backups.git"><span class="hint">${t("Пусто — push выключен")}</span></label>
+    ${section(`Gitea <span class="muted small">${t('— необязательно')}</span>`, t('Push истории бэкапов в репозиторий после каждого прогона.'), `
+      <label class="wide">${t('URL репозитория')}<input class="input" name="gitea_url" value="${esc(s.gitea_url)}" placeholder="https://gitea.local/netops/mikrotik-backups.git">${hint(t('Пусто — push выключен'))}</label>
       ${text('gitea_user', t('Пользователь'))}
       ${secret('gitea_token', t('Токен доступа'), t('Право write:repository'))}
       ${text('gitea_branch', t('Ветка'))}
       ${text('git_author_name', t('Автор коммитов'))}
       ${text('git_author_email', t('E-mail автора'))}
-      <label class="wide">${t("CA Gitea (PEM), если самоподписанный")}<textarea class="input" name="gitea_ca_pem" placeholder="-----BEGIN CERTIFICATE-----">${esc(s.gitea_ca_pem)}</textarea></label>
-      ${chk('gitea_insecure', t('Не проверять TLS Gitea (небезопасно)'))}
-    </div></section>
+      <label class="wide">${t('CA Gitea (PEM), если самоподписанный')}<textarea class="input" name="gitea_ca_pem" placeholder="-----BEGIN CERTIFICATE-----">${esc(s.gitea_ca_pem)}</textarea></label>
+      ${chk('gitea_insecure', t('Не проверять TLS Gitea'), t('небезопасно: только для отладки'))}`, 'data-show="git"')}
 
-    <section class="card"><h3>${t("Уведомления в Telegram")} <span class="muted small">${t("— необязательно")}</span></h3><div class="form-grid">
+    ${section(`${t('Уведомления в Telegram')} <span class="muted small">${t('— необязательно')}</span>`, t('Отчёт о прогоне в чат или канал. Текст сообщения настраивается.'), `
       ${secret('telegram_token', t('Токен бота'))}
       ${text('telegram_chat', 'chat_id')}
-      <label>${t("Язык уведомлений")} <select class="input" name="notify_lang">
-        <option value="ru"${s.notify_lang === 'ru' ? ' selected' : ''}>Русский</option>
-        <option value="en"${s.notify_lang === 'en' ? ' selected' : ''}>English</option></select></label>
-      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="test-tg">${t("Отправить тестовое сообщение")}</button>
-        <span class="hint">${t("Сначала сохраните настройки. Уведомления приходят при ошибках и изменениях.")}</span></div>
-    </div></section>
+      ${sel('notify_lang', t('Язык уведомлений'), [['ru', 'Русский'], ['en', 'English']])}
+      ${sel('notify_when', t('Когда отправлять'), [['changes', t('при ошибках и изменениях')], ['errors', t('только при ошибках')], ['always', t('после каждого прогона')]], '', 'wide-select')}
+      <label>${t('Шаблон')}<select class="input" id="tg-preset">
+        <option value="detailed">${t('Подробный')}</option><option value="short">${t('Краткий')}</option>
+        <option value="errors">${t('Только ошибки')}</option><option value="custom">${t('Свой')}</option></select></label>
+      <label class="wide">${t('Текст сообщения')}<textarea class="input tg-template" name="telegram_template" rows="5" spellcheck="false">${esc(tplValue)}</textarea>
+        ${hint(t('Строки, в которых переменные оказались пустыми (нет изменений, нет ошибок), не отправляются.'))}</label>
+      <div class="wide"><div class="hint">${t('Переменные — нажмите, чтобы вставить:')}</div>
+        <div class="var-chips">${tgVars.map((v) => `<button type="button" class="var-chip" data-act="tg-var" data-var="${v}" title="${esc(VAR_TITLE[v] || '')}">{${v}}</button>`).join('')}</div></div>
+      <div class="wide"><div class="hint">${t('Предпросмотр на примере данных:')}</div><pre class="code tg-preview" id="tg-preview"></pre>
+        <div class="err-text hidden" id="tg-unknown"></div></div>
+      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="test-tg">${t('Отправить тестовое сообщение')}</button>
+        ${hint(t('Отправляется сохранённый шаблон — сначала сохраните настройки.'))}</div>`)}
 
-    <section class="card"><h3>${t("Обновления")}</h3><div class="form-grid">
-      <div class="wide">${chk('update_check', t('Проверять новые версии на GitHub (раз в 6 часов)'))}</div>
-      <label>${t("Канал")} <select class="input" name="update_channel">
-        <option value="auto"${s.update_channel === 'auto' ? ' selected' : ''}>${t("авто: пре-релизы, если установлен пре-релиз")}</option>
-        <option value="stable"${s.update_channel === 'stable' ? ' selected' : ''}>${t("только стабильные")}</option>
-        <option value="prerelease"${s.update_channel === 'prerelease' ? ' selected' : ''}>${t("включая пре-релизы")}</option></select></label>
+    ${section(t('Обновления'), t('Новые версии mtb на GitHub.'), `
+      ${chk('update_check', t('Проверять новые версии на GitHub (раз в 6 часов)'))}
+      ${sel('update_channel', t('Канал'), [['auto', t('авто: пре-релизы, если установлен пре-релиз')], ['stable', t('только стабильные')], ['prerelease', t('включая пре-релизы')]], '', 'wide wide-select')}
       <div class="wide hint" id="update-status"></div>
-      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="update-check">${t("Проверить сейчас")}</button>
-        <button type="button" class="btn btn-sm" data-act="update-open">${t("Подробнее")}</button></div>
-    </div></section>
+      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="update-check">${t('Проверить сейчас')}</button>
+        <button type="button" class="btn btn-sm" data-act="update-open">${t('Подробнее')}</button></div>`)}
 
-    <section class="card"><h3>${t("Веб-интерфейс")}</h3><div class="form-grid">
-      <div class="wide">${chk('web_restore', t('Разрешить восстановление (/import по SSH) из списка бэкапов'))}</div>
-      <div class="wide hint">${t("Cookie сессии")} ${data.cookie_secure ? t('с флагом Secure (HTTPS)') : t('без флага Secure — для работы через HTTPS за прокси задайте WEB_COOKIE_SECURE=true')}.</div>
-    </div></section>
+    ${section(t('Веб-интерфейс'), '', `
+      ${chk('web_restore', t('Разрешить восстановление из списка бэкапов'), t('/import по SSH поверх текущей конфигурации'))}
+      <div class="wide hint">${t('Cookie сессии')} ${data.cookie_secure ? t('с флагом Secure (HTTPS)') : t('без флага Secure — для работы через HTTPS за прокси задайте WEB_COOKIE_SECURE=true')}.</div>`)}
   </div>
   <div class="alert alert-error hidden mt" id="settings-error"></div>
   <div class="sticky-save mt"><span class="muted small" id="settings-dirty"></span>
-    <button type="button" class="btn" data-act="reset">${t("Отменить изменения")}</button>
-    <button class="btn btn-primary">${t("Сохранить")}</button></div>
+    <button type="button" class="btn" data-act="reset">${t('Отменить изменения')}</button>
+    <button class="btn btn-primary">${t('Сохранить')}</button></div>
   </form>`;
 
   const form = $('settings-form');
+  const tpl = form.querySelector('[name=telegram_template]'), presetSel = $('tg-preset');
+  presetSel.value = presetOf(tplValue, s.notify_lang);
   api('/api/update').then(renderUpdateStatus).catch(() => {});
+
+  let previewTimer;
+  const preview = () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      try {
+        const r = await api('/api/settings/telegram-preview', { method: 'POST', body: { template: tpl.value, lang: formValues(form).notify_lang } });
+        $('tg-preview').textContent = r.text || t('(пустое сообщение)');
+        $('tg-unknown').classList.toggle('hidden', !r.unknown.length);
+        $('tg-unknown').textContent = r.unknown.length ? `${t('Неизвестные переменные:')} ${r.unknown.map((u) => `{${u}}`).join(', ')}` : '';
+      } catch { /* предпросмотр необязателен */ }
+    }, 250);
+  };
   const sync = () => {
     const v = formValues(form);
     form.querySelectorAll('[data-show]').forEach((x) => x.classList.toggle('hidden', x.dataset.show !== v.storage));
+    presetSel.value = presetOf(tpl.value, v.notify_lang);
     $('settings-dirty').textContent = Object.keys(collect()).length ? t('Есть несохранённые изменения') : '';
   };
   const collect = () => {
     const v = formValues(form), out = {};
     for (const [k, val] of Object.entries(v)) {
       if (SECRET_KEYS.has(k)) { if (val) out[k] = val; continue; }
+      if (k === 'telegram_template') {
+        const effective = val.trim() === presets[v.notify_lang].detailed ? '' : val;   // шаблон по умолчанию = пусто
+        if (effective !== s.telegram_template) out[k] = effective;
+        continue;
+      }
       if (String(val) !== String(s[k])) out[k] = val;
     }
     form.querySelectorAll('[data-clear]').forEach((c) => { if (c.checked) out[c.dataset.clear] = null; });
     return out;
   };
-  form.addEventListener('input', sync); form.addEventListener('change', sync); sync();
+  form.addEventListener('input', (e) => {
+    if (e.target === presetSel) return;              // выбор шаблона обрабатывает change, иначе sync() его сбросит
+    sync(); if (e.target === tpl) preview();
+  });
+  form.addEventListener('change', (e) => {
+    if (e.target === presetSel && presetSel.value !== 'custom') { tpl.value = presets[formValues(form).notify_lang][presetSel.value]; preview(); }
+    if (e.target.name === 'notify_lang') {             // готовый шаблон — переключить на тот же в новом языке
+      const other = e.target.value === 'ru' ? 'en' : 'ru', p = presetOf(tpl.value, other);
+      if (p !== 'custom') tpl.value = presets[e.target.value][p];
+      preview();
+    }
+    sync();
+  });
+  sync(); preview();
+
   form.onclick = async (e) => {
-    const act = e.target.closest('[data-act]')?.dataset.act;
+    const el2 = e.target.closest('[data-act]'), act = el2?.dataset.act;
     if (act === 'reset') renderSettings(data);
     if (act === 'update-open') showUpdate();
+    if (act === 'tg-var') {
+      const ins = `{${el2.dataset.var}}`, a = tpl.selectionStart ?? tpl.value.length, b = tpl.selectionEnd ?? a;
+      tpl.value = tpl.value.slice(0, a) + ins + tpl.value.slice(b);
+      tpl.focus(); tpl.selectionStart = tpl.selectionEnd = a + ins.length;
+      sync(); preview();
+    }
     if (act === 'update-check') {
-      const btn = e.target.closest('button');
-      await withBusy(btn, t('Проверка…'), async () => {
+      await withBusy(el2, t('Проверка…'), async () => {
         try { const u = await api('/api/update/check', { method: 'POST' }); applyUpdateInfo(u); renderUpdateStatus(u);
           toast(u.error ? u.error : u.available ? `${t('Доступна версия')} v${u.latest.version}` : t('Установлена последняя версия'), !!u.error); }
         catch (ex) { toast(ex.message, true); }
       });
     }
     if (act === 'test-tg') {
-      const btn = e.target.closest('button');
-      await withBusy(btn, t('Отправка…'), async () => {
+      await withBusy(el2, t('Отправка…'), async () => {
         try { await api('/api/settings/test-telegram', { method: 'POST' }); toast(t('Сообщение отправлено')); }
         catch (ex) { toast(ex.message, true); }
       });
@@ -913,7 +971,7 @@ function renderSettings(data) {
     if (!Object.keys(changes).length) return toast(t('Нет изменений'));
     try {
       const r = await api('/api/settings', { method: 'PUT', body: changes });
-      toast(`${t("Сохранено:")} ${r.changed.length}`);
+      toast(`${t('Сохранено:')} ${r.changed.length}`);
       state.me = await api('/api/me'); renderBanners(); renderSettings(r);
     } catch (ex) { $('settings-error').textContent = ex.message; $('settings-error').classList.remove('hidden'); }
   };

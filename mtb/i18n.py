@@ -164,6 +164,9 @@ EN: dict[str, str] = {
     "{} — текущее имя устройства": "{} is the device's current name",
     "Устройство {} существует — его имя нельзя сделать прежним именем другого": "Device {} exists — its name cannot be a former name of another device",
     "{} уже указано как прежнее имя устройства {}": "{} is already a former name of device {}",
+    "Когда отправлять — changes, errors или always": "When to send must be changes, errors or always",
+    "Шаблон сообщения — не длиннее 3000 символов": "The message template must be at most 3000 characters",
+    "Неизвестные переменные в шаблоне: {}": "Unknown variables in the template: {}",
     # ---- проверка устройства
     "SSH ok, SFTP ok": "SSH ok, SFTP ok",
 }

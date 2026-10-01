@@ -178,6 +178,37 @@ const EN = {
     "Backups and run history under these names are shown for this device. On rename, the old name is added here automatically.",
   'прежние имена': 'former names',
 
+  // ---- форма устройства (двухстрочные подписи)
+  'Только конфиг': 'Config only', '(без .backup и сертификатов)': '(no .backup or certificates)',
+  'Разрешить слабые ключи': 'Allow weak keys', '(ключ сертификата 1024 бит)': '(1024-bit certificate key)',
+  // ---- настройки: описания секций
+  'Когда запускать бэкап всех включённых устройств.': 'When to back up all enabled devices.',
+  'Где лежат бэкапы и чем шифруются .backup и сертификаты.': 'Where backups are kept and how .backup files and certificates are encrypted.',
+  'Push истории бэкапов в репозиторий после каждого прогона.': 'Push the backup history to a repository after every run.',
+  'Отчёт о прогоне в чат или канал. Текст сообщения настраивается.': 'A run report to a chat or channel. The message text is customizable.',
+  'Новые версии mtb на GitHub.': 'New mtb versions on GitHub.',
+  'Не проверять TLS Gitea': "Don't verify Gitea TLS", 'небезопасно: только для отладки': 'insecure: for debugging only',
+  'Разрешить восстановление из списка бэкапов': 'Allow restore from the backup list',
+  '/import по SSH поверх текущей конфигурации': '/import over SSH on top of the current configuration',
+  // ---- шаблоны Telegram
+  'Когда отправлять': 'When to send', 'при ошибках и изменениях': 'on errors and changes',
+  'только при ошибках': 'on errors only', 'после каждого прогона': 'after every run',
+  'Шаблон': 'Template', 'Подробный': 'Detailed', 'Краткий': 'Short', 'Только ошибки': 'Errors only', 'Свой': 'Custom',
+  'Текст сообщения': 'Message text',
+  'Строки, в которых переменные оказались пустыми (нет изменений, нет ошибок), не отправляются.':
+    'Lines whose variables turn out empty (no changes, no errors) are not sent.',
+  'Переменные — нажмите, чтобы вставить:': 'Variables — click to insert:',
+  'Предпросмотр на примере данных:': 'Preview with sample data:',
+  'Отправляется сохранённый шаблон — сначала сохраните настройки.': 'The saved template is sent — save the settings first.',
+  '(пустое сообщение)': '(empty message)', 'Неизвестные переменные:': 'Unknown variables:',
+  'значок: ✅ успешно, ⚠️ есть ошибки, ❌ всё неудачно': 'icon: ✅ success, ⚠️ some errors, ❌ all failed',
+  'mtb или «ручной бэкап»': 'mtb or "manual backup"', 'по расписанию / ручной': 'scheduled / manual',
+  'дата прогона': 'run date', 'время прогона': 'run time', 'успешных устройств': 'devices succeeded',
+  'всего устройств': 'devices total', 'устройств с ошибкой': 'devices failed', 'устройств с изменениями': 'devices changed',
+  'список устройств': 'device list', 'строка «Изменения: …» или пусто': 'a "Changes: …" line, or empty',
+  'ошибки по устройствам, по строке на каждую': 'per-device errors, one line each',
+  'предупреждения (например, push в Gitea)': 'warnings (for example, Gitea push)', 'версия mtb': 'mtb version',
+
   // ---- пользователи
   'пароль не задан': 'no password', 'временный пароль': 'temporary password', 'активен': 'active', '(вы)': '(you)',
   'администратор': 'administrator', 'просмотр': 'viewer', 'Выдать временный пароль': 'Issue a temporary password',
@@ -209,10 +240,14 @@ function writePref(key, value) {
   try { localStorage.setItem(key, value); } catch { /* приватный режим */ }
 }
 
-// Язык по умолчанию — английский. После входа берётся язык из профиля пользователя.
+// Язык: cookie mtb_lang (ставит сервер по профилю пользователя) → localStorage → английский.
+function readCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
 const LANG = (() => {
-  const saved = readPref('mtb-lang');
-  return saved === 'ru' || saved === 'en' ? saved : 'en';
+  for (const v of [readCookie('mtb_lang'), readPref('mtb-lang')]) if (v === 'ru' || v === 'en') return v;
+  return 'en';
 })();
 const LOCALE = LANG === 'en' ? 'en-GB' : 'ru-RU';
 document.documentElement.lang = LANG;
@@ -224,6 +259,7 @@ function t(text) {
 
 function setLang(lang) {
   writePref('mtb-lang', lang);
+  document.cookie = `mtb_lang=${lang}; Path=/; Max-Age=31536000; SameSite=Strict`;
   location.reload();            // проще и надёжнее, чем перерисовывать всё на лету
 }
 
