@@ -124,8 +124,9 @@ def _run(s, devices, kind, notes, notify) -> RunResult:
 
     if result.ok:
         try:
+            # пустой коммит без изменений — чтобы в списке бэкапов была строка с датой каждого прогона
             store.commit(_commit_message(started, kind, notes, result.ok, result.changed),
-                         allow_empty=manual)
+                         allow_empty=manual or getattr(s, "git_every_run", False))
         except Exception as exc:
             log.exception("Ошибка хранилища")
             result.warnings.append(f"{'git commit' if s.storage == 'git' else 'ротация снимков'}: {exc}")

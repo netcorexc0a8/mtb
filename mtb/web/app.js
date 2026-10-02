@@ -327,7 +327,7 @@ function renderList() {
     <tr data-id="${esc(b.id)}" class="${state.selected.has(b.id) ? 'sel' : ''}" title="${t("Нажмите для просмотра")}">
       <td class="chk" data-stop><input type="checkbox" data-act="toggle" ${state.selected.has(b.id) ? 'checked' : ''} aria-label="${t("Выбрать")}"></td>
       <td class="dev">${esc(b.device)}</td>
-      <td><span class="badge ${esc(b.type)}">${esc(TYPE_LABEL[b.type] || b.type)}</span></td>
+      <td><span class="badge ${esc(b.type)}">${esc(TYPE_LABEL[b.type] || b.type)}</span>${b.changed === false ? `<span class="unchanged" title="${t('Конфигурация такая же, как в предыдущем бэкапе')}">${t('без изменений')}</span>` : ''}</td>
       <td class="num">${fmtBytes(b.size)}</td>
       <td class="date">${fmtDate(b.created_at)}</td>
       <td class="notes">${esc(b.notes)}</td>
@@ -841,6 +841,7 @@ function renderSettings(data) {
       ${secret('backup_passphrase', t('Пароль шифрования .backup и сертификатов'), t('Храните его отдельно: без него бэкапы не восстановить'))}
       ${sel('storage', t('Режим хранения'), [['git', t('git — текущее состояние + история')], ['snapshots', t('снимки — папка с датой на каждый прогон')]], '', 'wide wide-select')}
       <div data-show="git" class="wide">${chk('git_history', t('Вести историю изменений в git'))}</div>
+      <div data-show="git" class="wide">${chk('git_every_run', t('Фиксировать каждый прогон'), t('В списке бэкапов появляется строка с датой каждого прогона, даже если ничего не изменилось (пустой коммит). Без этого строка появляется только при изменениях.'))}</div>
       <div data-show="snapshots">${num('snapshot_retention_days', t('Хранить снимки, дней'), 0, 36500, t('0 — хранить все'))}</div>
       <div data-show="snapshots">${num('snapshot_keep_min', t('Всегда оставлять последних'), 1, 10000)}</div>
       <div data-show="snapshots" class="wide">${chk('snapshot_on_change', t('Создавать снимок только при изменениях'))}</div>`)}

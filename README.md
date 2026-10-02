@@ -400,6 +400,8 @@ The simplest mode is "SSH only" + "config only": one SSH command per device, not
 
 **Git** (default). The folder holds the current state and the local git repository holds the history, so `git log -p` and `git diff` work directly in `backups/`. Turning off "keep history" leaves only the latest files.
 
+The **"Record every run"** option (on by default): every successful run appears in the backup list with its own date. If nothing changed, an empty commit is created and the row is marked "no changes". With the option off, a row appears only when something changed, and the date of an unchanged run is visible only in the run history and the device status. Failed devices do not appear in the list.
+
 In git mode, the delete button in the list **removes the backup from the list**: commits are never deleted from git history and stay in Gitea. The confirmation says so.
 
 **Snapshots.** Every run creates a dated folder with a full copy of everything collected.

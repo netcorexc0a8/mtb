@@ -293,6 +293,7 @@ SETTINGS_SPEC: dict[str, tuple[type, object, bool]] = {
     "backup_passphrase": (str, "", True),
     "storage": (str, "git", False),
     "git_history": (bool, True, False),
+    "git_every_run": (bool, True, False),
     "snapshot_retention_days": (int, 30, False),
     "snapshot_keep_min": (int, 7, False),
     "snapshot_on_change": (bool, False, False),
@@ -422,6 +423,7 @@ class Settings:
     tg_token: str | None
     tg_chat: str | None
     web_restore: bool = False
+    git_every_run: bool = True
     notify_lang: str = "en"
     notify_when: str = "changes"
     telegram_template: str = ""
@@ -448,7 +450,7 @@ def load(boot: Bootstrap, db: Database, box: SecretBox) -> Settings:
         data_dir=boot.data_dir, backup_dir=boot.backup_dir,
         storage=v["storage"], snapshot_retention_days=v["snapshot_retention_days"],
         snapshot_keep_min=v["snapshot_keep_min"], snapshot_on_change=v["snapshot_on_change"],
-        git_history=v["git_history"], schedule=v["schedule"], timezone=v["timezone"],
+        git_history=v["git_history"], git_every_run=v["git_every_run"], schedule=v["schedule"], timezone=v["timezone"],
         workers=v["workers"], git_url=v["gitea_url"] or None, git_user=v["gitea_user"] or None,
         git_token=v["gitea_token"] or None, git_branch=v["gitea_branch"] or "main",
         git_author_name=v["git_author_name"], git_author_email=v["git_author_email"],

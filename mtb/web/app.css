@@ -234,3 +234,4 @@ code { font-family: var(--mono); font-size: 12px; }
 .tg-preview { margin-top: 6px; min-height: 48px; white-space: pre-wrap; }
 .set-section .form-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 .wide-select select { max-width: 460px; }
+.unchanged { margin-left: 8px; font-size: 11px; color: var(--ink-4); white-space: nowrap; }

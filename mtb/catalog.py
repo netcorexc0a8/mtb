@@ -47,6 +47,7 @@ class Entry:
     ref: str             # stamp | sha | ""
     deletable: bool
     dir: str = ""        # папка на диске / в git на момент бэкапа
+    changed: bool | None = None   # git: менялись ли файлы устройства в этом коммите
 
     def __post_init__(self):
         self.dir = self.dir or self.device
@@ -64,6 +65,7 @@ class Entry:
             "id": self.id, "device": self.device, "created_at": self.created.isoformat(),
             "type": self.type, "notes": self.notes, "size": self.size,
             "filename": self.filename, "deletable": self.deletable, "delete_mode": self.delete_mode,
+            "changed": self.changed,
         }
 
 
@@ -138,7 +140,7 @@ class Catalog:
             raw = self._git("log", "--format=%x1e%H%x1f%aI%x1f%s%x1f%b%x1d", "--name-only")
         except RuntimeError:
             return []                                   # пустой репозиторий
-        rows: list[tuple[str, str, datetime, str, str]] = []
+        rows: list[tuple[str, str, datetime, str, str, bool]] = []
         for rec in raw.decode("utf-8", errors="replace").split("\x1e")[1:]:
             head, _, names = rec.partition("\x1d")
             parts = head.split("\x1f", 3)
@@ -146,18 +148,18 @@ class Catalog:
                 continue
             sha, date, subject, body = parts
             trailers = dict(m.groups() for m in re.finditer(r"^([A-Za-z-]+):\s*(.*)$", body, re.M))
-            devices = {n.strip().split("/", 1)[0] for n in names.splitlines() if "/" in n}
-            devices |= {d for d in trailers.get("Devices", "").split(",") if d}
+            touched = {n.strip().split("/", 1)[0] for n in names.splitlines() if "/" in n}
+            devices = touched | {d for d in trailers.get("Devices", "").split(",") if d}
             kind = trailers.get("Type") or ("manual" if subject.startswith("manual") else "scheduled")
             if kind == "rename":
                 continue
             created = datetime.fromisoformat(date).astimezone(self.tz)
             for dev in devices:
                 if NAME_RE.match(dev):
-                    rows.append((sha, dev, created, kind, trailers.get("Notes", "")))
+                    rows.append((sha, dev, created, kind, trailers.get("Notes", ""), dev in touched))
         if not rows:
             return []
-        check = "".join(f"{sha}:{dev}/config.rsc\n" for sha, dev, *_ in rows).encode()
+        check = "".join(f"{row[0]}:{row[1]}/config.rsc\n" for row in rows).encode()
         sizes = self._git("cat-file", "--batch-check=%(objecttype) %(objectsize)", input_=check)
         out = []
         hidden = self._hidden()
@@ -165,11 +167,11 @@ class Catalog:
             parts = line.split()
             if len(parts) != 2 or parts[0] != "blob":
                 continue                                # у коммита нет config.rsc этого устройства
-            sha, dev, created, kind, notes = row
+            sha, dev, created, kind, notes, touched = row
             if (sha, dev) in hidden:
                 continue
             out.append(Entry(_enc(f"g|{sha}|{dev}"), self.display(dev), created, kind, notes,
-                             int(parts[1]), "git", sha, True, dev))
+                             int(parts[1]), "git", sha, True, dev, touched))
         return out
 
     # ---------------------------------------------------------------- snapshots / plain

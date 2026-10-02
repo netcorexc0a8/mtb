@@ -209,6 +209,11 @@ const EN = {
   'ошибки по устройствам, по строке на каждую': 'per-device errors, one line each',
   'предупреждения (например, push в Gitea)': 'warnings (for example, Gitea push)', 'версия mtb': 'mtb version',
 
+  'Фиксировать каждый прогон': 'Record every run',
+  'В списке бэкапов появляется строка с датой каждого прогона, даже если ничего не изменилось (пустой коммит). Без этого строка появляется только при изменениях.':
+    'Every run appears in the backup list with its date, even if nothing changed (an empty commit). Without it, a row appears only when something changed.',
+  'Конфигурация такая же, как в предыдущем бэкапе': 'Same configuration as in the previous backup',
+
   // ---- пользователи
   'пароль не задан': 'no password', 'временный пароль': 'temporary password', 'активен': 'active', '(вы)': '(you)',
   'администратор': 'administrator', 'просмотр': 'viewer', 'Выдать временный пароль': 'Issue a temporary password',
