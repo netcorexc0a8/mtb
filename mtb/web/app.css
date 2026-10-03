@@ -232,6 +232,16 @@ code { font-family: var(--mono); font-size: 12px; }
 .var-chip { font: 12px var(--mono); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); cursor: pointer; }
 .var-chip:hover { border-color: var(--accent); color: var(--accent); }
 .tg-preview { margin-top: 6px; min-height: 48px; white-space: pre-wrap; }
+.notify-list { display: grid; gap: 8px; }
+.notify-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.notify-row .notify-url { flex: 1; min-width: 0; font-size: 12px; }
+.notify-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.mt-sm { margin-top: 8px; }
+.notify-help { margin-top: 10px; font-size: 12px; }
+.notify-help summary { cursor: pointer; color: var(--accent); }
+.notify-formats { margin: 8px 0; border-collapse: collapse; width: 100%; }
+.notify-formats td { padding: 3px 8px 3px 0; vertical-align: top; border: 0; }
+.notify-formats td:first-child { white-space: nowrap; color: var(--ink-2); }
 .set-section .form-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 .wide-select select { max-width: 460px; }
 .unchanged { margin-left: 8px; font-size: 11px; color: var(--ink-4); white-space: nowrap; }

@@ -4,7 +4,7 @@
 для них: «{}» в русском шаблоне — подставляемая часть, она переносится в
 английский шаблон в том же порядке. Перевод применяется на выходе: к ошибкам
 API, журналу запусков, результатам проверок и отчёту probe, а также к
-уведомлениям в Telegram, если выбран английский язык уведомлений.
+уведомлениям, если выбран английский язык уведомлений.
 """
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ EN: dict[str, str] = {
     "Устройства нет в списке устройств": "The device is not in the device list",
     "устройство не найдено": "device not found",
     "Укажите адрес": "Enter an address",
-    "Сначала сохраните токен бота и chat_id": "Save the bot token and chat_id first",
     "✅ mtb: проверка уведомлений ({})": "✅ mtb: notification test ({})",
     "Логин: латиница, цифры и . _ @ -, от 2 до 64 символов": "Username: Latin letters, digits and . _ @ -, 2 to 64 characters",
     "Неизвестная роль": "Unknown role",
@@ -53,7 +52,6 @@ EN: dict[str, str] = {
     "Хранение — git или snapshots": "Storage must be git or snapshots",
     "Срок хранения ≥ 0 дней, минимум снимков ≥ 1": "Retention ≥ 0 days, minimum snapshots ≥ 1",
     "CA Gitea должен быть в формате PEM": "The Gitea CA must be in PEM format",
-    "Для Telegram нужны и токен бота, и chat_id": "Telegram needs both a bot token and a chat_id",
     "Имя: латиница, цифры, точка, дефис, подчёркивание (до 64 символов)": "Name: Latin letters, digits, dot, hyphen, underscore (up to 64 characters)",
     "{}: не указан адрес": "{}: no address specified",
     "{}: не указан пользователь": "{}: no user specified",
@@ -167,6 +165,27 @@ EN: dict[str, str] = {
     "Когда отправлять — changes, errors или always": "When to send must be changes, errors or always",
     "Шаблон сообщения — не длиннее 3000 символов": "The message template must be at most 3000 characters",
     "Неизвестные переменные в шаблоне: {}": "Unknown variables in the template: {}",
+    # ---- уведомления (notify.py)
+    "Пустой URL уведомления": "Empty notification URL",
+    "Неизвестный сервис уведомлений: {}": "Unknown notification service: {}",
+    "Укажите URL уведомления": "Enter a notification URL",
+    "Каналов уведомлений — не больше {}": "No more than {} notification channels",
+    "notify_urls: ожидался список": "notify_urls: a list was expected",
+    "notify_urls: неверный элемент списка": "notify_urls: invalid list item",
+    "неверный порт": "invalid port",
+    "нужны токен бота и chats=": "a bot token and chats= are required",
+    "нужны токен и ID вебхука": "a token and a webhook ID are required",
+    "нужен вебхук (hook:A-B-C@webhook) или бот-токен (xoxb:ТОКЕН@КАНАЛ)":
+        "a webhook (hook:A-B-C@webhook) or a bot token (xoxb:TOKEN@CHANNEL) is required",
+    "нужны сервер и токен вебхука": "a server and a webhook token are required",
+    "нужны сервер, пароль или токен и rooms=": "a server, a password or token, and rooms= are required",
+    "нужны сервер и топик": "a server and a topic are required",
+    "нужны сервер и токен приложения": "a server and an application token are required",
+    "нужны API-токен и ключ пользователя": "an API token and a user key are required",
+    "нужны сервер, from= и to=": "a server, from= and to= are required",
+    "нужен адрес": "an address is required",
+    "priority должен быть числом": "priority must be a number",
+    "encryption — auto, none, starttls или tls": "encryption must be auto, none, starttls or tls",
     # ---- проверка устройства
     "SSH ok, SFTP ok": "SSH ok, SFTP ok",
 }

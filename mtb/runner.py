@@ -14,7 +14,7 @@ from . import config
 from .mikrotik import backup_device
 from .i18n import translate
 from . import __version__
-from .notify import PRESETS, render, report_context, should_notify, telegram
+from .notify import PRESETS, render, report_context, send, should_notify
 from .storage import make_storage
 
 log = logging.getLogger("mtb")
@@ -95,8 +95,7 @@ def _run(s, devices, kind, notes, notify) -> RunResult:
         log.exception("Ошибка подготовки хранилища")
         result.failed["storage"] = str(exc)
         if notify:
-            telegram(s.tg_token, s.tg_chat,
-                     translate(f"❌ mtb: ошибка хранилища {s.backup_dir}: {exc}", s.notify_lang))
+            send(s.notify_urls, translate(f"❌ mtb: ошибка хранилища {s.backup_dir}: {exc}", s.notify_lang))
         return result
 
     if not devices:
@@ -144,7 +143,7 @@ def _run(s, devices, kind, notes, notify) -> RunResult:
                              failed={n: translate(e, s.notify_lang) for n, e in result.failed.items()},
                              changed=result.changed, warnings=translate(result.warnings, s.notify_lang),
                              devices=[d.name for d in devices], version=__version__)
-        telegram(s.tg_token, s.tg_chat, render(s.telegram_template or PRESETS[s.notify_lang]["detailed"], ctx))
+        send(s.notify_urls, render(s.notify_template or PRESETS[s.notify_lang]["detailed"], ctx))
 
     if not result.failed and not manual:
         (s.data_dir / "last_success").write_text(datetime.now(tz).isoformat())

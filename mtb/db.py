@@ -164,6 +164,11 @@ class Database:
                 c.execute("INSERT INTO settings(key, value) VALUES(?, ?) "
                           "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (k, json.dumps(v)))
 
+    def delete_settings(self, keys) -> None:
+        with self.tx() as c:
+            for k in keys:
+                c.execute("DELETE FROM settings WHERE key=?", (k,))
+
     # ---------------------------------------------------------------- журнал
 
     def audit(self, user: str | None, action: str, details: str = "") -> None:

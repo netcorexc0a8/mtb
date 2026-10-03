@@ -31,7 +31,6 @@ from .catalog import MAX_CONTENT, Catalog
 from .config import ConfigError
 from .i18n import translate
 from .mikrotik import FAILURE_RE, check_device, fetch_fingerprint, restore_config
-from .notify import telegram_send
 from .probe import format_report, probe_device
 from .runner import RUN_LOCK, run_once
 from . import updater
@@ -497,7 +496,7 @@ class WebApp:
         from .notify import PRESETS, TEMPLATE_VARS
         return {"settings": config.settings_public(v), "next_run": nxt.isoformat() if nxt else None,
                 "cookie_secure": self.boot.web_cookie_secure,
-                "telegram": {"presets": PRESETS, "vars": list(TEMPLATE_VARS)}}
+                "notify": {"presets": PRESETS, "vars": list(TEMPLATE_VARS)}}
 
     @route("GET", "/api/settings", role="admin")
     def settings_get(self, req: Request):
@@ -512,8 +511,8 @@ class WebApp:
                 self.on_settings_changed()
         return {"ok": True, "changed": changed, **self._settings_payload()}
 
-    @route("POST", "/api/settings/telegram-preview", role="admin")
-    def settings_telegram_preview(self, req: Request):
+    @route("POST", "/api/settings/notify-preview", role="admin")
+    def settings_notify_preview(self, req: Request):
         from .notify import PRESETS, render, sample_context, template_unknown_vars
         lang = str(req.body.get("lang") or "en")
         lang = lang if lang in PRESETS else "en"
@@ -521,18 +520,33 @@ class WebApp:
         return {"text": render(template, sample_context(lang, __version__)),
                 "unknown": template_unknown_vars(template)}
 
-    @route("POST", "/api/settings/test-telegram", role="admin")
-    def settings_test_telegram(self, req: Request):
-        from .notify import PRESETS, render, sample_context
+    @route("POST", "/api/settings/test-notify", role="admin")
+    def settings_test_notify(self, req: Request):
+        """Проверка одного канала: сохранённого ({"keep": номер}) или ещё не сохранённого ({"url": …}).
+        Текст — по шаблону и языку из формы, если они переданы."""
+        from .notify import PRESETS, NotifyError, parse, render, sample_context, send_one
         s = self.settings()
-        if not (s.tg_token and s.tg_chat):
-            raise ApiError(400, "Сначала сохраните токен бота и chat_id")
-        text = render(s.telegram_template or PRESETS[s.notify_lang]["detailed"], sample_context(s.notify_lang, __version__))
-        note = "test message, sample data" if s.notify_lang == "en" else "тестовое сообщение, пример данных"
+        keep, url = req.body.get("keep"), req.body.get("url")
+        if isinstance(keep, int) and 0 <= keep < len(s.notify_urls):
+            url = s.notify_urls[keep]
+        elif not (isinstance(url, str) and url.strip()):
+            raise ApiError(400, "Укажите URL уведомления")
+        lang = str(req.body.get("lang") or s.notify_lang)
+        lang = lang if lang in PRESETS else "en"
+        template = req.body.get("template")
+        template = str(template) if isinstance(template, str) else s.notify_template
+        text = render(template or PRESETS[lang]["detailed"], sample_context(lang, __version__))
+        note = "test message, sample data" if lang == "en" else "тестовое сообщение, пример данных"
         try:
-            telegram_send(s.tg_token, s.tg_chat, f"{text}\n\n({note} · {req.username})")
-        except Exception as exc:  # noqa: BLE001
+            parse(url)
+        except NotifyError as exc:
+            raise ApiError(400, str(exc)) from exc
+        try:
+            send_one(url, f"{text}\n\n({note} · {req.username})")
+        except NotifyError as exc:
             raise ApiError(502, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ApiError(502, f"{type(exc).__name__}: {exc}") from exc
         return {"ok": True}
 
     # ================================================================ обновления

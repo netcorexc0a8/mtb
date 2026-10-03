@@ -8,7 +8,7 @@
   WEB_COOKIE_SECURE            auto | true | false — флаг Secure у cookie сессии
   LOG_LEVEL
 
-Устройства, расписание, хранение, Gitea, Telegram, пользователи — в веб-интерфейсе.
+Устройства, расписание, хранение, Gitea, уведомления, пользователи — в веб-интерфейсе.
 """
 from __future__ import annotations
 
@@ -81,7 +81,9 @@ def load_bootstrap(data_dir: str | None = None) -> Bootstrap:
 
 def open_storage(boot: Bootstrap) -> tuple[Database, SecretBox]:
     boot.data_dir.mkdir(parents=True, exist_ok=True)
-    return Database(boot.db_path), SecretBox(boot.data_dir / "secret.key")
+    db, box = Database(boot.db_path), SecretBox(boot.data_dir / "secret.key")
+    migrate_settings(db, box)
+    return db, box
 
 
 # ---------------------------------------------------------------- устройство
@@ -305,12 +307,11 @@ SETTINGS_SPEC: dict[str, tuple[type, object, bool]] = {
     "gitea_insecure": (bool, False, False),
     "git_author_name": (str, "mtb", False),
     "git_author_email": (str, "mtb@localhost", False),
-    "telegram_token": (str, "", True),
-    "telegram_chat": (str, "", False),
+    "notify_urls": (list, [], True),
     "web_restore": (bool, False, False),
     "notify_lang": (str, "en", False),
     "notify_when": (str, "changes", False),
-    "telegram_template": (str, "", False),
+    "notify_template": (str, "", False),
     "update_check": (bool, True, False),
     "update_channel": (str, "auto", False),
 }
@@ -323,12 +324,56 @@ def read_settings(db: Database, box: SecretBox) -> dict:
         value = raw.get(key, default)
         if secret:
             value = box.decrypt(value) if value else ""
-        out[key] = typ(value) if typ is not bool else _bool(value)
+            if typ is list:
+                value = json.loads(value) if value else []
+        out[key] = list(value) if typ is list else typ(value) if typ is not bool else _bool(value)
     return out
 
 
 def settings_public(values: dict) -> dict:
-    return {k: ({"set": bool(values[k])} if SETTINGS_SPEC[k][2] else values[k]) for k in SETTINGS_SPEC}
+    from .notify import label
+    out = {k: ({"set": bool(values[k])} if SETTINGS_SPEC[k][2] else values[k]) for k in SETTINGS_SPEC}
+    out["notify_urls"] = [label(u) for u in values["notify_urls"]]     # без токенов
+    return out
+
+
+def migrate_settings(db: Database, box: SecretBox) -> None:
+    """Прежние telegram_token + telegram_chat — в список URL уведомлений."""
+    raw = db.get_settings()
+    old = [k for k in ("telegram_token", "telegram_chat", "telegram_template") if k in raw]
+    if not old:
+        return
+    from .notify import telegram_url
+    new = {}
+    if "notify_urls" not in raw and raw.get("telegram_token") and raw.get("telegram_chat"):
+        url = telegram_url(box.decrypt(raw["telegram_token"]), str(raw["telegram_chat"]))
+        new["notify_urls"] = box.encrypt(json.dumps([url]))
+    if "notify_template" not in raw and raw.get("telegram_template"):
+        new["notify_template"] = raw["telegram_template"]
+    db.set_settings(new)
+    db.delete_settings(old)
+
+
+def _notify_urls(value, current: list[str]) -> list[str]:
+    """Список из веба: {"keep": номер} — сохранённый URL (веб его не видит), {"url": "…"} — новый."""
+    from .notify import NotifyError, parse
+    if not isinstance(value, list):
+        raise ConfigError("notify_urls: ожидался список")
+    out = []
+    for item in value:
+        if isinstance(item, dict) and isinstance(item.get("keep"), int) and 0 <= item["keep"] < len(current):
+            url = current[item["keep"]]
+        elif isinstance(item, dict) and isinstance(item.get("url"), str):
+            url = item["url"].strip()
+            try:
+                parse(url)
+            except NotifyError as exc:
+                raise ConfigError(str(exc)) from exc
+        else:
+            raise ConfigError("notify_urls: неверный элемент списка")
+        if url not in out:
+            out.append(url)
+    return out
 
 
 def update_settings(db: Database, box: SecretBox, changes: dict) -> list[str]:
@@ -339,6 +384,9 @@ def update_settings(db: Database, box: SecretBox, changes: dict) -> list[str]:
         if key not in SETTINGS_SPEC:
             raise ConfigError(f"Неизвестная настройка: {key}")
         typ, _, secret = SETTINGS_SPEC[key]
+        if typ is list:
+            new[key] = [] if value is None else _notify_urls(value, current[key])
+            continue
         if secret:
             if value is None:
                 new[key] = ""
@@ -351,7 +399,8 @@ def update_settings(db: Database, box: SecretBox, changes: dict) -> list[str]:
             raise ConfigError(f"{key}: неверное значение") from exc
     validate_settings(new)
     changed = [k for k in SETTINGS_SPEC if new[k] != current[k]]
-    db.set_settings({k: (box.encrypt(new[k]) if SETTINGS_SPEC[k][2] else new[k]) for k in changed})
+    db.set_settings({k: (box.encrypt(json.dumps(new[k]) if SETTINGS_SPEC[k][0] is list else new[k])
+                         if SETTINGS_SPEC[k][2] else new[k]) for k in changed})
     return changed
 
 
@@ -384,16 +433,16 @@ def validate_settings(v: dict) -> None:
         raise ConfigError("Канал обновлений — auto, stable или prerelease")
     if v["notify_when"] not in ("changes", "errors", "always"):
         raise ConfigError("Когда отправлять — changes, errors или always")
-    if len(v["telegram_template"]) > 3000:
+    if len(v["notify_template"]) > 3000:
         raise ConfigError("Шаблон сообщения — не длиннее 3000 символов")
-    from .notify import template_unknown_vars
-    unknown = template_unknown_vars(v["telegram_template"])
+    from .notify import MAX_URLS, template_unknown_vars
+    if len(v["notify_urls"]) > MAX_URLS:
+        raise ConfigError(f"Каналов уведомлений — не больше {MAX_URLS}")
+    unknown = template_unknown_vars(v["notify_template"])
     if unknown:
         raise ConfigError("Неизвестные переменные в шаблоне: " + ", ".join("{" + u + "}" for u in unknown))
     if v["notify_lang"] not in ("ru", "en"):
         raise ConfigError("Язык уведомлений — ru или en")
-    if bool(v["telegram_token"]) != bool(v["telegram_chat"]):
-        raise ConfigError("Для Telegram нужны и токен бота, и chat_id")
 
 
 # ---------------------------------------------------------------- рабочий объект
@@ -420,13 +469,12 @@ class Settings:
     git_author_email: str
     git_ca: str | None
     git_insecure: bool
-    tg_token: str | None
-    tg_chat: str | None
+    notify_urls: list[str]
     web_restore: bool = False
     git_every_run: bool = True
     notify_lang: str = "en"
     notify_when: str = "changes"
-    telegram_template: str = ""
+    notify_template: str = ""
     web_listen: str = "0.0.0.0:8080"
     web_tls_cert: str | None = None
     web_tls_key: str | None = None
@@ -455,9 +503,9 @@ def load(boot: Bootstrap, db: Database, box: SecretBox) -> Settings:
         git_token=v["gitea_token"] or None, git_branch=v["gitea_branch"] or "main",
         git_author_name=v["git_author_name"], git_author_email=v["git_author_email"],
         git_ca=git_ca, git_insecure=v["gitea_insecure"],
-        tg_token=v["telegram_token"] or None, tg_chat=v["telegram_chat"] or None,
+        notify_urls=v["notify_urls"],
         web_restore=v["web_restore"], notify_lang=v["notify_lang"], notify_when=v["notify_when"],
-        telegram_template=v["telegram_template"], web_listen=boot.web_listen,
+        notify_template=v["notify_template"], web_listen=boot.web_listen,
         web_tls_cert=boot.web_tls_cert, web_tls_key=boot.web_tls_key,
         web_cookie_secure=boot.web_cookie_secure,
         aliases=load_aliases(db),

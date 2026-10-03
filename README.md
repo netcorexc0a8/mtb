@@ -10,7 +10,7 @@ A service for daily backups of MikroTik RouterOS 7 devices, with a web interface
 - an encrypted binary backup;
 - certificates with their private keys.
 
-Everything is configured in the browser: devices, schedule, storage, Gitea, Telegram and users. Settings live in SQLite, with device passwords and tokens encrypted. Backups are stored in a folder, either as current state with git history or as dated snapshots, and pushing to a self-hosted Gitea is optional.
+Everything is configured in the browser: devices, schedule, storage, Gitea, notifications and users. Settings live in SQLite, with device passwords and tokens encrypted. Backups are stored in a folder, either as current state with git history or as dated snapshots, and pushing to a self-hosted Gitea is optional.
 
 It ships as a single binary on GitHub Releases (Linux amd64/arm64) and as a Docker image. No Python, no external database and no CDN are needed, so it also works in air-gapped networks.
 
@@ -29,7 +29,7 @@ It ships as a single binary on GitHub Releases (Linux amd64/arm64) and as a Dock
   - run history, settings, users with roles, audit log.
 - **First login:** an `admin` user is created, and you choose its password on the first login.
 - **English and Russian interface**, with a light, dark or system theme.
-- **Telegram notifications** on errors and changes.
+- **Notifications** on errors and changes: Telegram, Discord, Slack, Mattermost, Matrix, ntfy, Gotify, Pushover, e-mail and webhooks. Channels are Shoutrrr-style URLs.
 - **Updates:** the UI shows the version, the service announces new GitHub releases and updates in one click.
 
 ## Contents
@@ -89,7 +89,7 @@ On schedule, for each device:
 3. Fetch the files over SFTP or via the API `/file/read`. In SSH mode, the config is taken directly from `/export` output.
 4. Delete the temporary `mtbk-*` files from the router, including when the run fails.
 5. Write the result to the backup folder as a git commit or a snapshot, and push to Gitea if configured.
-6. Record the outcome in the run history, and send a Telegram message if something changed or failed.
+6. Record the outcome in the run history, and send notifications if something changed or failed.
 
 Settings are re-read from the database before every run. Changes made in the UI, including the schedule, take effect without a restart.
 
@@ -275,7 +275,7 @@ The default language is English. The chosen language is stored in the user profi
 | **Backups** | Filtered list, preview, comparing two copies, downloading any file of a backup, manual backup, delete, restore. | Everyone: view and download. Admins: everything else. |
 | **Devices** | List with the last backup status. Add and edit, check access, check transports (`probe`), back up now. | Everyone: list. Admins: changes. |
 | **Runs** | Run history: successes, changes, per-device errors. "Run now" button. | Everyone. |
-| **Settings** | Schedule, storage and encryption, Gitea, Telegram, restore from the UI. | Admins. |
+| **Settings** | Schedule, storage and encryption, Gitea, notifications, restore from the UI. | Admins. |
 | **Users** | Admin and view-only roles, temporary passwords. | Admins. |
 | **Audit** | Logins, settings and device changes, downloads, deletions, restores. | Admins. |
 
@@ -322,19 +322,38 @@ The **Settings** section, admins only.
 | Schedule | Cron expression (default `0 3 * * *`), time zone, how many devices to poll in parallel. Shows the next run time. |
 | Storage and encryption | Passphrase for `.backup` and certificates. Mode: git or snapshots. For git: whether to keep history. For snapshots: retention, minimum kept, "only on changes". |
 | Gitea | Repository URL, user, token, branch, commit author, CA in PEM, disabling TLS verification. |
-| Telegram | Bot token, `chat_id`, notification language, when to send, and the message template. See [Telegram messages](#telegram-messages). |
+| Notifications | Channels (URLs), language, when to send, and the message template. See [Notifications](#notifications). |
 | Updates | Whether to check GitHub for new versions, and the channel: auto, stable only, or including pre-releases. "Check now" button. See [Upgrading](#upgrading). |
 | Web interface | Allow restore (`/import`) from the backup list. Off by default. |
 
-### Telegram messages
+### Notifications
 
-Under **Settings → Telegram notifications** you set:
+Under **Settings → Notifications** you keep a list of channels. Each channel is one URL in [Shoutrrr](https://github.com/nicholas-fedor/shoutrrr) format (as in Beszel and Watchtower). Every channel has a "Test" button that sends a sample message using the template currently in the form, so you don't need to save first. URLs are stored encrypted and never sent back to the browser: a saved channel shows only its service and target, without tokens.
+
+| Service | URL |
+|---|---|
+| Telegram | `telegram://123456:ABC-token@telegram?chats=-1001234567890,@channel` — several chats separated by commas, a topic as `chat_id:thread_id` |
+| Discord | `discord://TOKEN@WEBHOOK_ID` — from `https://discord.com/api/webhooks/ID/TOKEN` |
+| Slack | `slack://hook:A-B-C@webhook` (webhook `https://hooks.slack.com/services/A/B/C`) or `slack://xoxb:TOKEN@CHANNEL` |
+| Mattermost | `mattermost://[name@]mm.example.com/TOKEN[/channel]` |
+| Matrix | `matrix://user:password@matrix.example.com/?rooms=!id:example.com,#room:example.com`; without a user the password is an access token |
+| ntfy | `ntfy://[user:password@]ntfy.sh/topic`, parameters `priority`, `tags`, `click`; without a user the password is a `tk_…` token |
+| Gotify | `gotify://gotify.example.com[/path]/APP_TOKEN`, parameter `priority` |
+| Pushover | `pushover://shoutrrr:API_TOKEN@USER_KEY/?devices=phone` |
+| E-mail | `smtp://user:password@smtp.example.com:587/?from=mtb@example.com&to=a@example.com,b@example.com`, `encryption=auto\|none\|starttls\|tls`, `subject=` |
+| Webhook | `generic://hooks.example.com/path` — text in the POST body; `template=json` — `{"title": …, "message": …}`; `@Header=value` — an HTTP header; `generic+http://…` — without TLS |
+
+Common parameters: `title=` sets the title where the service has one (`mtb` by default), `disabletls=yes` uses http instead of https for your own server, `insecure=yes` skips certificate checks (self-signed in an isolated network). Encode special characters in tokens and passwords as in a URL: `@` → `%40`, `/` → `%2F`.
+
+If a Telegram bot token and `chat_id` were set before upgrading, they become a `telegram://…` channel on first start.
+
+Shared by all channels:
 
 - **When to send:** on errors and changes (default), on errors only, or after every run.
 - **Notification language:** English (default) or Russian.
 - **Template:** a preset ("Detailed", "Short", "Errors only") or your own text, with a live preview on sample data.
 
-Lines whose variables turn out empty (for example `{changes}` when nothing changed) are not sent. The text is sent as is, without Markdown. "Send a test message" sends the saved template with sample data.
+Lines whose variables turn out empty (for example `{changes}` when nothing changed) are not sent. The text is sent as is, without Markdown. A failing channel doesn't stop the others and is logged.
 
 | Variable | Value |
 |---|---|
@@ -631,7 +650,7 @@ mtb/
 │   ├── storage.py       # git / snapshots storage, Gitea push
 │   ├── catalog.py       # backup index for the web UI
 │   ├── updater.py       # GitHub release checks and self-update
-│   └── notify.py        # Telegram
+│   └── notify.py        # notifications (Shoutrrr-style URLs)
 ├── packaging/           # PyInstaller entry point, systemd unit
 ├── docs/                # screenshots
 ├── .gitattributes       # LF for code and scripts

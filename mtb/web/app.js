@@ -792,7 +792,21 @@ async function loadRuns() {
 
 /* ================================================================== настройки */
 
-const SECRET_KEYS = new Set(['backup_passphrase', 'gitea_token', 'telegram_token']);
+const SECRET_KEYS = new Set(['backup_passphrase', 'gitea_token']);
+
+// Форматы URL уведомлений (Shoutrrr) — подсказка в настройках
+const NOTIFY_FORMATS = [
+  ['Telegram', 'telegram://123456:ABC-токен@telegram?chats=-1001234567890,@channel'],
+  ['Discord', 'discord://ТОКЕН@ID_ВЕБХУКА'],
+  ['Slack', 'slack://hook:T000-B000-XXXX@webhook'],
+  ['Mattermost', 'mattermost://[имя@]mm.example.com/ТОКЕН[/канал]'],
+  ['Matrix', 'matrix://user:пароль@matrix.example.com/?rooms=!id:example.com,#room:example.com'],
+  ['ntfy', 'ntfy://[user:пароль@]ntfy.sh/топик'],
+  ['Gotify', 'gotify://gotify.example.com/ТОКЕН_ПРИЛОЖЕНИЯ'],
+  ['Pushover', 'pushover://shoutrrr:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/'],
+  ['E-mail', 'smtp://user:пароль@smtp.example.com:587/?from=mtb@example.com&to=admin@example.com'],
+  ['Webhook', 'generic://hooks.example.com/mtb?template=json&@Authorization=Bearer%20ТОКЕН'],
+];
 
 async function loadSettings() {
   const el = $('page-settings');
@@ -804,7 +818,8 @@ async function loadSettings() {
 
 function renderSettings(data) {
   const s = data.settings, el = $('page-settings');
-  const presets = data.telegram.presets, tgVars = data.telegram.vars;
+  const presets = data.notify.presets, tgVars = data.notify.vars;
+  let channels = s.notify_urls.map((c, i) => ({ keep: i, ...c }));
   const hint = (h) => (h ? `<span class="hint">${h}</span>` : '');
   const secret = (key, label, h = '') => `<label>
       <span class="label-row">${label} <span class="secret-state ${s[key].set ? 'set' : 'unset'}">${s[key].set ? t('● задан') : t('○ не задан')}</span></span>
@@ -819,7 +834,7 @@ function renderSettings(data) {
       <div class="set-head"><h3>${title}</h3>${desc ? `<p class="hint">${desc}</p>` : ''}</div>
       <div class="form-grid">${body}</div></section>`;
   const presetOf = (tpl, lang) => Object.keys(presets[lang]).find((k) => presets[lang][k] === tpl) || 'custom';
-  const tplValue = s.telegram_template || presets[s.notify_lang].detailed;
+  const tplValue = s.notify_template || presets[s.notify_lang].detailed;
   const VAR_TITLE = {
     icon: t('значок: ✅ успешно, ⚠️ есть ошибки, ❌ всё неудачно'), title: t('mtb или «ручной бэкап»'),
     kind: t('по расписанию / ручной'), date: t('дата прогона'), time: t('время прогона'),
@@ -856,22 +871,24 @@ function renderSettings(data) {
       <label class="wide">${t('CA Gitea (PEM), если самоподписанный')}<textarea class="input" name="gitea_ca_pem" placeholder="-----BEGIN CERTIFICATE-----">${esc(s.gitea_ca_pem)}</textarea></label>
       ${chk('gitea_insecure', t('Не проверять TLS Gitea'), t('небезопасно: только для отладки'))}`, 'data-show="git"')}
 
-    ${section(`${t('Уведомления в Telegram')} <span class="muted small">${t('— необязательно')}</span>`, t('Отчёт о прогоне в чат или канал. Текст сообщения настраивается.'), `
-      ${secret('telegram_token', t('Токен бота'))}
-      ${text('telegram_chat', 'chat_id')}
+    ${section(`${t('Уведомления')} <span class="muted small">${t('— необязательно')}</span>`, t('Отчёт о прогоне в мессенджер, на почту или в webhook. Каждый канал — строка URL, как в Shoutrrr (Beszel, Watchtower).'), `
+      <div class="wide"><div class="notify-list" id="notify-list"></div>
+        <div class="row gap mt-sm"><button type="button" class="btn btn-sm" data-act="ch-add">${icon('plus')} ${t('Добавить канал')}</button></div>
+        <details class="notify-help"><summary>${t('Форматы URL')}</summary>
+          <table class="notify-formats">${NOTIFY_FORMATS.map(([n, f]) => `<tr><td>${n}</td><td class="mono break">${esc(f)}</td></tr>`).join('')}</table>
+          <p class="hint">${t('Общие параметры: title= — заголовок, disabletls=yes — http вместо https, insecure=yes — не проверять сертификат. Спецсимволы в токенах и паролях кодируйте как в URL (@ → %40).')}</p>
+        </details></div>
       ${sel('notify_lang', t('Язык уведомлений'), [['ru', 'Русский'], ['en', 'English']])}
       ${sel('notify_when', t('Когда отправлять'), [['changes', t('при ошибках и изменениях')], ['errors', t('только при ошибках')], ['always', t('после каждого прогона')]], '', 'wide-select')}
       <label>${t('Шаблон')}<select class="input" id="tg-preset">
         <option value="detailed">${t('Подробный')}</option><option value="short">${t('Краткий')}</option>
         <option value="errors">${t('Только ошибки')}</option><option value="custom">${t('Свой')}</option></select></label>
-      <label class="wide">${t('Текст сообщения')}<textarea class="input tg-template" name="telegram_template" rows="5" spellcheck="false">${esc(tplValue)}</textarea>
+      <label class="wide">${t('Текст сообщения')}<textarea class="input tg-template" name="notify_template" rows="5" spellcheck="false">${esc(tplValue)}</textarea>
         ${hint(t('Строки, в которых переменные оказались пустыми (нет изменений, нет ошибок), не отправляются.'))}</label>
       <div class="wide"><div class="hint">${t('Переменные — нажмите, чтобы вставить:')}</div>
         <div class="var-chips">${tgVars.map((v) => `<button type="button" class="var-chip" data-act="tg-var" data-var="${v}" title="${esc(VAR_TITLE[v] || '')}">{${v}}</button>`).join('')}</div></div>
       <div class="wide"><div class="hint">${t('Предпросмотр на примере данных:')}</div><pre class="code tg-preview" id="tg-preview"></pre>
-        <div class="err-text hidden" id="tg-unknown"></div></div>
-      <div class="wide row gap"><button type="button" class="btn btn-sm" data-act="test-tg">${t('Отправить тестовое сообщение')}</button>
-        ${hint(t('Отправляется сохранённый шаблон — сначала сохраните настройки.'))}</div>`)}
+        <div class="err-text hidden" id="tg-unknown"></div></div>`)}
 
     ${section(t('Обновления'), t('Новые версии mtb на GitHub.'), `
       ${chk('update_check', t('Проверять новые версии на GitHub (раз в 6 часов)'))}
@@ -891,7 +908,17 @@ function renderSettings(data) {
   </form>`;
 
   const form = $('settings-form');
-  const tpl = form.querySelector('[name=telegram_template]'), presetSel = $('tg-preset');
+  const tpl = form.querySelector('[name=notify_template]'), presetSel = $('tg-preset');
+  const renderChannels = () => {
+    $('notify-list').innerHTML = channels.length ? channels.map((c, i) => `<div class="notify-row" data-i="${i}">
+        ${c.keep !== undefined
+          ? `<span class="badge manual">${esc(c.service)}</span><span class="notify-label">${esc(c.label) || `<span class="muted">${t('токен скрыт')}</span>`}</span>`
+          : `<input class="input mono notify-url" data-ch="${i}" value="${esc(c.url)}" placeholder="telegram://…" spellcheck="false" autocomplete="off">`}
+        <button type="button" class="btn btn-sm" data-act="ch-test" data-i="${i}">${t('Проверить')}</button>
+        <button type="button" class="icon-btn danger" data-act="ch-del" data-i="${i}" title="${t('Удалить')}">${icon('trash')}</button>
+      </div>`).join('') : `<div class="hint">${t('Каналов нет — уведомления не отправляются.')}</div>`;
+  };
+  renderChannels();
   presetSel.value = presetOf(tplValue, s.notify_lang);
   api('/api/update').then(renderUpdateStatus).catch(() => {});
 
@@ -900,7 +927,7 @@ function renderSettings(data) {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(async () => {
       try {
-        const r = await api('/api/settings/telegram-preview', { method: 'POST', body: { template: tpl.value, lang: formValues(form).notify_lang } });
+        const r = await api('/api/settings/notify-preview', { method: 'POST', body: { template: tpl.value, lang: formValues(form).notify_lang } });
         $('tg-preview').textContent = r.text || t('(пустое сообщение)');
         $('tg-unknown').classList.toggle('hidden', !r.unknown.length);
         $('tg-unknown').textContent = r.unknown.length ? `${t('Неизвестные переменные:')} ${r.unknown.map((u) => `{${u}}`).join(', ')}` : '';
@@ -917,18 +944,23 @@ function renderSettings(data) {
     const v = formValues(form), out = {};
     for (const [k, val] of Object.entries(v)) {
       if (SECRET_KEYS.has(k)) { if (val) out[k] = val; continue; }
-      if (k === 'telegram_template') {
+      if (k === 'notify_template') {
         const effective = val.trim() === presets[v.notify_lang].detailed ? '' : val;   // шаблон по умолчанию = пусто
-        if (effective !== s.telegram_template) out[k] = effective;
+        if (effective !== s.notify_template) out[k] = effective;
         continue;
       }
       if (String(val) !== String(s[k])) out[k] = val;
     }
     form.querySelectorAll('[data-clear]').forEach((c) => { if (c.checked) out[c.dataset.clear] = null; });
+    // каналы: сохранённые — по номеру (их URL веб не видит), новые — текстом; пустые строки не в счёт
+    const list = channels.filter((c) => c.keep !== undefined || c.url.trim())
+      .map((c) => (c.keep !== undefined ? { keep: c.keep } : { url: c.url.trim() }));
+    if (list.length !== s.notify_urls.length || list.some((c, i) => c.keep !== i)) out.notify_urls = list;
     return out;
   };
   form.addEventListener('input', (e) => {
     if (e.target === presetSel) return;              // выбор шаблона обрабатывает change, иначе sync() его сбросит
+    if (e.target.dataset.ch !== undefined) channels[+e.target.dataset.ch].url = e.target.value;
     sync(); if (e.target === tpl) preview();
   });
   form.addEventListener('change', (e) => {
@@ -959,10 +991,20 @@ function renderSettings(data) {
         catch (ex) { toast(ex.message, true); }
       });
     }
-    if (act === 'test-tg') {
+    if (act === 'ch-add') {
+      channels.push({ url: '' }); renderChannels(); sync();
+      $('notify-list').querySelector('.notify-row:last-child input')?.focus();
+    }
+    if (act === 'ch-del') { channels.splice(+el2.dataset.i, 1); renderChannels(); sync(); }
+    if (act === 'ch-test') {
+      const c = channels[+el2.dataset.i], v = formValues(form);
+      if (c.keep === undefined && !c.url.trim()) return toast(t('Введите URL'), true);
       await withBusy(el2, t('Отправка…'), async () => {
-        try { await api('/api/settings/test-telegram', { method: 'POST' }); toast(t('Сообщение отправлено')); }
-        catch (ex) { toast(ex.message, true); }
+        try {
+          await api('/api/settings/test-notify', { method: 'POST',
+            body: { ...(c.keep !== undefined ? { keep: c.keep } : { url: c.url.trim() }), lang: v.notify_lang, template: v.notify_template } });
+          toast(t('Сообщение отправлено'));
+        } catch (ex) { toast(ex.message, true); }
       });
     }
   };
