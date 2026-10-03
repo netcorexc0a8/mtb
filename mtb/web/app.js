@@ -794,7 +794,7 @@ async function loadRuns() {
 
 const SECRET_KEYS = new Set(['backup_passphrase', 'gitea_token']);
 
-// Форматы URL уведомлений (Shoutrrr) — подсказка в настройках
+// Форматы URL уведомлений — подсказка в настройках
 const NOTIFY_FORMATS = [
   ['Telegram', 'telegram://123456:ABC-токен@telegram?chats=-1001234567890,@channel'],
   ['Discord', 'discord://ТОКЕН@ID_ВЕБХУКА'],
@@ -803,7 +803,7 @@ const NOTIFY_FORMATS = [
   ['Matrix', 'matrix://user:пароль@matrix.example.com/?rooms=!id:example.com,#room:example.com'],
   ['ntfy', 'ntfy://[user:пароль@]ntfy.sh/топик'],
   ['Gotify', 'gotify://gotify.example.com/ТОКЕН_ПРИЛОЖЕНИЯ'],
-  ['Pushover', 'pushover://shoutrrr:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/'],
+  ['Pushover', 'pushover://:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/'],
   ['E-mail', 'smtp://user:пароль@smtp.example.com:587/?from=mtb@example.com&to=admin@example.com'],
   ['Webhook', 'generic://hooks.example.com/mtb?template=json&@Authorization=Bearer%20ТОКЕН'],
 ];
@@ -871,7 +871,7 @@ function renderSettings(data) {
       <label class="wide">${t('CA Gitea (PEM), если самоподписанный')}<textarea class="input" name="gitea_ca_pem" placeholder="-----BEGIN CERTIFICATE-----">${esc(s.gitea_ca_pem)}</textarea></label>
       ${chk('gitea_insecure', t('Не проверять TLS Gitea'), t('небезопасно: только для отладки'))}`, 'data-show="git"')}
 
-    ${section(`${t('Уведомления')} <span class="muted small">${t('— необязательно')}</span>`, t('Отчёт о прогоне в мессенджер, на почту или в webhook. Каждый канал — строка URL, как в Shoutrrr (Beszel, Watchtower).'), `
+    ${section(`${t('Уведомления')} <span class="muted small">${t('— необязательно')}</span>`, t('Отчёт о прогоне в мессенджер, на почту или в webhook. Каждый канал — одна строка URL.'), `
       <div class="wide"><div class="notify-list" id="notify-list"></div>
         <div class="row gap mt-sm"><button type="button" class="btn btn-sm" data-act="ch-add">${icon('plus')} ${t('Добавить канал')}</button></div>
         <details class="notify-help"><summary>${t('Форматы URL')}</summary>

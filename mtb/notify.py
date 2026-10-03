@@ -1,4 +1,4 @@
-"""Уведомления: список URL в формате Shoutrrr (как в Beszel и Watchtower).
+"""Уведомления: список каналов, каждый задаётся одной строкой URL.
 
   telegram://ТОКЕН@telegram?chats=ID[,ID]        токен бота вида 123456:ABC…, ID — chat_id,
                                                  @канал или chat_id:thread_id (тема)
@@ -10,7 +10,7 @@
                                                  без пользователя пароль — это access token
   ntfy://[пользователь:пароль@]сервер[:порт]/ТОПИК   без пользователя пароль — токен tk_…
   gotify://сервер[:порт][/путь]/ТОКЕН_ПРИЛОЖЕНИЯ
-  pushover://shoutrrr:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/[?devices=a,b]
+  pushover://:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/[?devices=a,b]
   smtp://[пользователь:пароль@]сервер[:порт]/?from=mtb@example.com&to=a@example.com[,b@…]
                                                  encryption=auto|none|starttls|tls
   generic://сервер[:порт]/путь                   webhook: текст в теле POST;

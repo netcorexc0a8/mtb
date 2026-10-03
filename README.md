@@ -29,7 +29,7 @@ It ships as a single binary on GitHub Releases (Linux amd64/arm64) and as a Dock
   - run history, settings, users with roles, audit log.
 - **First login:** an `admin` user is created, and you choose its password on the first login.
 - **English and Russian interface**, with a light, dark or system theme.
-- **Notifications** on errors and changes: Telegram, Discord, Slack, Mattermost, Matrix, ntfy, Gotify, Pushover, e-mail and webhooks. Channels are Shoutrrr-style URLs.
+- **Notifications** on errors and changes: Telegram, Discord, Slack, Mattermost, Matrix, ntfy, Gotify, Pushover, e-mail and webhooks. Each channel is a single URL.
 - **Updates:** the UI shows the version, the service announces new GitHub releases and updates in one click.
 
 ## Contents
@@ -328,7 +328,7 @@ The **Settings** section, admins only.
 
 ### Notifications
 
-Under **Settings → Notifications** you keep a list of channels. Each channel is one URL in [Shoutrrr](https://github.com/nicholas-fedor/shoutrrr) format (as in Beszel and Watchtower). Every channel has a "Test" button that sends a sample message using the template currently in the form, so you don't need to save first. URLs are stored encrypted and never sent back to the browser: a saved channel shows only its service and target, without tokens.
+Under **Settings → Notifications** you keep a list of channels. Each channel is one URL. Every channel has a "Test" button that sends a sample message using the template currently in the form, so you don't need to save first. URLs are stored encrypted and never sent back to the browser: a saved channel shows only its service and target, without tokens.
 
 | Service | URL |
 |---|---|
@@ -339,7 +339,7 @@ Under **Settings → Notifications** you keep a list of channels. Each channel i
 | Matrix | `matrix://user:password@matrix.example.com/?rooms=!id:example.com,#room:example.com`; without a user the password is an access token |
 | ntfy | `ntfy://[user:password@]ntfy.sh/topic`, parameters `priority`, `tags`, `click`; without a user the password is a `tk_…` token |
 | Gotify | `gotify://gotify.example.com[/path]/APP_TOKEN`, parameter `priority` |
-| Pushover | `pushover://shoutrrr:API_TOKEN@USER_KEY/?devices=phone` |
+| Pushover | `pushover://:API_TOKEN@USER_KEY/?devices=phone` |
 | E-mail | `smtp://user:password@smtp.example.com:587/?from=mtb@example.com&to=a@example.com,b@example.com`, `encryption=auto\|none\|starttls\|tls`, `subject=` |
 | Webhook | `generic://hooks.example.com/path` — text in the POST body; `template=json` — `{"title": …, "message": …}`; `@Header=value` — an HTTP header; `generic+http://…` — without TLS |
 
@@ -650,7 +650,7 @@ mtb/
 │   ├── storage.py       # git / snapshots storage, Gitea push
 │   ├── catalog.py       # backup index for the web UI
 │   ├── updater.py       # GitHub release checks and self-update
-│   └── notify.py        # notifications (Shoutrrr-style URLs)
+│   └── notify.py        # notifications (channel URLs)
 ├── packaging/           # PyInstaller entry point, systemd unit
 ├── docs/                # screenshots
 ├── .gitattributes       # LF for code and scripts

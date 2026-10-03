@@ -136,8 +136,8 @@ const EN = {
   'Уведомления': 'Notifications', 'Добавить канал': 'Add channel', 'Проверить': 'Test',
   'Форматы URL': 'URL formats', 'токен скрыт': 'token hidden', 'Введите URL': 'Enter a URL',
   'Каналов нет — уведомления не отправляются.': 'No channels — notifications are not sent.',
-  'Отчёт о прогоне в мессенджер, на почту или в webhook. Каждый канал — строка URL, как в Shoutrrr (Beszel, Watchtower).':
-    'A run report to a messenger, e-mail or a webhook. Each channel is one URL, as in Shoutrrr (Beszel, Watchtower).',
+  'Отчёт о прогоне в мессенджер, на почту или в webhook. Каждый канал — одна строка URL.':
+    'A run report to a messenger, e-mail or a webhook. Each channel is a single URL.',
   'Общие параметры: title= — заголовок, disabletls=yes — http вместо https, insecure=yes — не проверять сертификат. Спецсимволы в токенах и паролях кодируйте как в URL (@ → %40).':
     'Common parameters: title= sets the title, disabletls=yes uses http instead of https, insecure=yes skips certificate checks. Encode special characters in tokens and passwords as in a URL (@ → %40).',
   'Отправить тестовое сообщение': 'Send a test message',

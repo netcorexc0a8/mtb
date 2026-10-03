@@ -27,7 +27,7 @@
   - журнал запусков, настройки, пользователи с ролями, аудит.
 - **Первый вход:** создаётся пользователь `admin`, пароль вы придумываете при первом входе.
 - **Интерфейс на русском и английском**, тема светлая, тёмная или как в системе.
-- **Уведомления** при ошибках и изменениях: Telegram, Discord, Slack, Mattermost, Matrix, ntfy, Gotify, Pushover, e-mail и webhook. Каналы задаются URL, как в Shoutrrr.
+- **Уведомления** при ошибках и изменениях: Telegram, Discord, Slack, Mattermost, Matrix, ntfy, Gotify, Pushover, e-mail и webhook. Каждый канал задаётся одной строкой URL.
 - **Обновления:** в интерфейсе видна версия, сервис сообщает о новом релизе на GitHub и обновляется в один клик.
 
 ## Содержание
@@ -326,7 +326,7 @@ docker run -d --name mtb --restart unless-stopped --init --user "$(id -u):$(id -
 
 ### Уведомления
 
-В **Настройки → Уведомления** задаётся список каналов. Каждый канал — одна строка URL в формате [Shoutrrr](https://github.com/nicholas-fedor/shoutrrr) (как в Beszel и Watchtower). У каждого канала есть кнопка «Проверить»: она отправляет пример сообщения по шаблону из формы, сохранять настройки для этого не нужно. URL хранятся в базе зашифрованными и в интерфейс не возвращаются: у сохранённого канала видны только сервис и адресат без токенов.
+В **Настройки → Уведомления** задаётся список каналов. Каждый канал — одна строка URL. У каждого канала есть кнопка «Проверить»: она отправляет пример сообщения по шаблону из формы, сохранять настройки для этого не нужно. URL хранятся в базе зашифрованными и в интерфейс не возвращаются: у сохранённого канала видны только сервис и адресат без токенов.
 
 | Сервис | URL |
 |---|---|
@@ -337,7 +337,7 @@ docker run -d --name mtb --restart unless-stopped --init --user "$(id -u):$(id -
 | Matrix | `matrix://user:пароль@matrix.example.com/?rooms=!id:example.com,#room:example.com`; без пользователя пароль — это access token |
 | ntfy | `ntfy://[user:пароль@]ntfy.sh/топик`, параметры `priority`, `tags`, `click`; без пользователя пароль — токен `tk_…` |
 | Gotify | `gotify://gotify.example.com[/путь]/ТОКЕН_ПРИЛОЖЕНИЯ`, параметр `priority` |
-| Pushover | `pushover://shoutrrr:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/?devices=phone` |
+| Pushover | `pushover://:API_ТОКЕН@КЛЮЧ_ПОЛЬЗОВАТЕЛЯ/?devices=phone` |
 | E-mail | `smtp://user:пароль@smtp.example.com:587/?from=mtb@example.com&to=a@example.com,b@example.com`, `encryption=auto\|none\|starttls\|tls`, `subject=` |
 | Webhook | `generic://hooks.example.com/путь` — текст в теле POST; `template=json` — `{"title": …, "message": …}`; `@Заголовок=значение` — HTTP-заголовок; `generic+http://…` — без TLS |
 
@@ -648,7 +648,7 @@ mtb/
 │   ├── storage.py       # хранение git / снимки, push в Gitea
 │   ├── catalog.py       # индекс бэкапов для веба
 │   ├── updater.py       # проверка релизов на GitHub и самообновление
-│   └── notify.py        # уведомления (URL в формате Shoutrrr)
+│   └── notify.py        # уведомления (URL каналов)
 ├── packaging/           # точка входа PyInstaller, systemd-юнит
 ├── docs/                # скриншоты
 ├── .gitattributes       # LF для кода и скриптов
