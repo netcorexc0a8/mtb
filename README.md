@@ -611,6 +611,15 @@ Everything works on Windows except self-update, which targets the Linux binary u
 git rm -r --cached -q .; git reset --hard
 ```
 
+**Checks.** On every PR and push to `main`, the `security` workflow runs bandit (Medium and above), pip-audit over `requirements.txt`, and the tests. Locally:
+
+```bash
+pip install bandit pip-audit pytest
+bandit -r mtb -ll && pip-audit -r requirements.txt && pytest -q tests
+```
+
+Deliberate bandit exceptions are marked `# nosec` in the code, with the reason in a comment next to it.
+
 **Binary:**
 
 ```bash
@@ -651,11 +660,12 @@ mtb/
 │   ├── catalog.py       # backup index for the web UI
 │   ├── updater.py       # GitHub release checks and self-update
 │   └── notify.py        # notifications (channel URLs)
+├── tests/               # tests (pytest)
 ├── packaging/           # PyInstaller entry point, systemd unit
 ├── docs/                # screenshots
 ├── .gitattributes       # LF for code and scripts
 ├── install.sh, mtb.spec, Dockerfile, docker-compose.yml, .env.example
 ├── README.md            # English
 ├── README.ru.md         # Russian (primary)
-└── .github/workflows/release.yml
+└── .github/workflows/   # release.yml — releases, security.yml — checks
 ```

@@ -609,6 +609,15 @@ python -m mtb serve          # http://localhost:8080, данные в .\data и 
 git rm -r --cached -q .; git reset --hard
 ```
 
+**Проверки.** На каждый PR и push в `main` workflow `security` запускает bandit (уровень Medium и выше), pip-audit по `requirements.txt` и тесты. Локально так же:
+
+```bash
+pip install bandit pip-audit pytest
+bandit -r mtb -ll && pip-audit -r requirements.txt && pytest -q tests
+```
+
+Осознанные исключения bandit помечены в коде `# nosec` с причиной в комментарии рядом.
+
 **Бинарник:**
 
 ```bash
@@ -649,11 +658,12 @@ mtb/
 │   ├── catalog.py       # индекс бэкапов для веба
 │   ├── updater.py       # проверка релизов на GitHub и самообновление
 │   └── notify.py        # уведомления (URL каналов)
+├── tests/               # тесты (pytest)
 ├── packaging/           # точка входа PyInstaller, systemd-юнит
 ├── docs/                # скриншоты
 ├── .gitattributes       # LF для кода и скриптов
 ├── install.sh, mtb.spec, Dockerfile, docker-compose.yml, .env.example
 ├── README.md            # English
 ├── README.ru.md         # русский (основной)
-└── .github/workflows/release.yml
+└── .github/workflows/   # release.yml — релизы, security.yml — проверки
 ```

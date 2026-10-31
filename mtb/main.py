@@ -161,11 +161,13 @@ def _service_health(timeout: float = 3) -> dict | None:
     import urllib.request
     host, _, port = os.environ.get("WEB_LISTEN", "0.0.0.0:8080").rpartition(":")
     host = host.strip("[]")
-    host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host  # nosec B104
     scheme = "https" if os.environ.get("WEB_TLS_CERT") else "http"
-    ctx = ssl._create_unverified_context() if scheme == "https" else None   # свой же сервис на localhost
+    # свой же сервис на localhost
+    ctx = ssl._create_unverified_context() if scheme == "https" else None   # nosec B323
     try:
-        with urllib.request.urlopen(f"{scheme}://{host}:{port or 8080}/healthz", timeout=timeout, context=ctx) as r:
+        # схема http/https
+        with urllib.request.urlopen(f"{scheme}://{host}:{port or 8080}/healthz", timeout=timeout, context=ctx) as r:  # nosec B310
             return json.loads(r.read())
     except Exception:  # noqa: BLE001 — сервис не запущен или недоступен
         return None

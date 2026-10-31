@@ -1,0 +1,42 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install --no-cache-dir -r requirements.txt bandit[sarif] pip-audit pytest
+
+      # Medium и выше валят проверку; осознанные места помечены # nosec с причиной
+      - name: Bandit
+        run: |
+          bandit -r mtb -ll -f sarif -o bandit.sarif --exit-zero
+          bandit -r mtb -ll
+
+      - name: Уязвимые зависимости
+        run: pip-audit -r requirements.txt
+
+      - name: Тесты
+        run: pytest -q tests
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-sarif
+          path: bandit.sarif
+          if-no-files-found: ignore
