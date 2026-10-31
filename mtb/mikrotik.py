@@ -142,7 +142,8 @@ def open_ssh(dev: Device, known_hosts: Path) -> paramiko.SSHClient:
     client = paramiko.SSHClient()
     if known_hosts.exists():
         client.load_host_keys(str(known_hosts))
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # TOFU, ключ сохраняется в known_hosts
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
     client.connect(
         dev.host, port=dev.ssh_port, username=dev.username, password=dev.password,
         timeout=dev.timeout, banner_timeout=dev.timeout, auth_timeout=dev.timeout,
@@ -204,7 +205,8 @@ class SshSession:
 
     def run_bytes(self, command: str, timeout: float | None = None) -> bytes:
         timeout = timeout or max(60.0, self.dev.timeout * 2)
-        _, stdout, stderr = self.client.exec_command(command, timeout=timeout)
+        # команды RouterOS из кода
+        _, stdout, stderr = self.client.exec_command(command, timeout=timeout)  # nosec B601
         out = stdout.read() + stderr.read()
         return out.replace(b"\r\n", b"\n")
 

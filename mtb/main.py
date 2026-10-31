@@ -7,7 +7,7 @@
   mtb check [-d NAME]        проверка доступа без экспорта
   mtb probe [-d NAME]        какой транспорт файлов работает (sftp / api / ssh)
   mtb fingerprint HOST[:PORT]
-  mtb reset-password [USER]  пароль будет задан заново при следующем входе
+  mtb reset-password [USER]  временный пароль для входа (по умолчанию admin)
   mtb update [--check] [-y]  обновить бинарник до нового релиза с GitHub
 """
 from __future__ import annotations
@@ -161,11 +161,13 @@ def _service_health(timeout: float = 3) -> dict | None:
     import urllib.request
     host, _, port = os.environ.get("WEB_LISTEN", "0.0.0.0:8080").rpartition(":")
     host = host.strip("[]")
-    host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host  # nosec B104
     scheme = "https" if os.environ.get("WEB_TLS_CERT") else "http"
-    ctx = ssl._create_unverified_context() if scheme == "https" else None   # свой же сервис на localhost
+    # свой же сервис на localhost
+    ctx = ssl._create_unverified_context() if scheme == "https" else None   # nosec B323
     try:
-        with urllib.request.urlopen(f"{scheme}://{host}:{port or 8080}/healthz", timeout=timeout, context=ctx) as r:
+        # схема http/https
+        with urllib.request.urlopen(f"{scheme}://{host}:{port or 8080}/healthz", timeout=timeout, context=ctx) as r:  # nosec B310
             return json.loads(r.read())
     except Exception:  # noqa: BLE001 — сервис не запущен или недоступен
         return None
@@ -280,10 +282,20 @@ def shutil_which(cmd: str) -> bool:
 def cmd_reset_password(ctx: Context, username: str) -> None:
     from .auth import ensure_admin, reset_password
     ensure_admin(ctx.db)
-    if not reset_password(ctx.db, username):
+    result = reset_password(ctx.db, username)
+    if result is None:
         raise SystemExit(f"Пользователь {username} не найден")
-    ctx.db.audit("cli", "user_reset_password", username)
-    print(f"Пароль {username} сброшен: при следующем входе в веб-интерфейс будет предложено задать новый.")
+    action, temp = result
+    if action == "created":
+        ctx.db.audit("cli", "user_create", f"{username} (admin)")
+        print(f"Пользователь {username} создан заново с ролью admin.")
+    else:
+        if action == "promoted":
+            ctx.db.audit("cli", "user_role", f"{username}: admin")
+            print(f"Пользователю {username} возвращена роль admin.")
+        ctx.db.audit("cli", "user_reset_password", username)
+    print(f"Временный пароль {username}: {temp}")
+    print("Войдите с ним в веб-интерфейс и задайте свой пароль. Прежние сессии пользователя завершены.")
 
 
 # ---------------------------------------------------------------- CLI
@@ -376,7 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
     ch.add_argument("--stable", action="store_true", help="только стабильные версии")
     up.add_argument("--force", action="store_true", help="не ждать окончания идущего бэкапа")
     rp = sub.add_parser("reset-password", parents=[common],
-                        help="сбросить пароль: новый задаётся при следующем входе")
+                        help="выдать временный пароль; admin при необходимости восстанавливается")
     rp.add_argument("username", nargs="?", default="admin")
     return ap
 

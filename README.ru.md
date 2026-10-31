@@ -289,7 +289,7 @@ docker run -d --name mtb --restart unless-stopped --init --user "$(id -u):$(id -
 - Новым пользователям администратор выдаёт временный пароль. При первом входе пользователь вводит его и придумывает свой.
 - Кнопка «Выдать временный пароль» сбрасывает забытый пароль и завершает сессии пользователя.
 - Свой пароль меняется в меню пользователя, при этом остальные ваши сессии завершаются.
-- Если забыт пароль единственного администратора: `mtb reset-password admin` на сервере. При следующем входе будет предложено задать новый.
+- Если забыт пароль администратора: `mtb reset-password` на сервере (в Docker: `docker compose exec mtb mtb reset-password`). Команда выводит временный пароль для `admin`: войдите с ним и задайте свой. Если `admin` удалили или понизили до наблюдателя, команда создаст учётную запись заново и вернёт ей роль администратора. Для другого пользователя укажите его логин: `mtb reset-password ivan`.
 
 ## Настройки устройства
 
@@ -451,7 +451,7 @@ mtb [--data-dir DIR] [-e ENV_FILE] [--log-level LEVEL] [КОМАНДА]
   probe [-d NAME ...] [--no-sftp]
                           какой транспорт файлов работает
   fingerprint HOST[:PORT] отпечаток, срок и PEM сертификата API-SSL
-  reset-password [USER]   сбросить пароль (по умолчанию admin)
+  reset-password [USER]   выдать временный пароль (по умолчанию admin)
   update [--check] [-y] [--version vX.Y.Z] [--pre | --stable] [--force]
                           обновить бинарник до нового релиза с GitHub
   -V, --version
@@ -566,7 +566,7 @@ mtb update --pre                   # учитывать пре-релизы (--s
 
 | Симптом | Решение |
 |---|---|
-| Забыт пароль `admin` | `mtb reset-password admin` на сервере. При следующем входе будет предложено задать новый. |
+| Забыт пароль `admin` | `mtb reset-password` на сервере (в Docker: `docker compose exec mtb mtb reset-password`). Войдите с выведенным временным паролем и задайте свой. |
 | После входа сразу снова форма входа | Интерфейс открыт по HTTP, а `WEB_COOKIE_SECURE=true`. Используйте HTTPS или уберите переменную. |
 | «Слишком много попыток» | 10 неудачных входов за 15 минут. Подождите или перезапустите сервис. |
 | `не удалось расшифровать секрет` | База скопирована без своего `secret.key`. Верните ключ или задайте пароли заново. |
@@ -609,6 +609,15 @@ python -m mtb serve          # http://localhost:8080, данные в .\data и 
 git rm -r --cached -q .; git reset --hard
 ```
 
+**Проверки.** На каждый PR и push в `main` workflow `security` запускает bandit (уровень Medium и выше), pip-audit по `requirements.txt` и тесты. Локально так же:
+
+```bash
+pip install bandit pip-audit pytest
+bandit -r mtb -ll && pip-audit -r requirements.txt && python -m pytest -q tests
+```
+
+Осознанные исключения bandit помечены в коде `# nosec` с причиной в комментарии рядом.
+
 **Бинарник:**
 
 ```bash
@@ -649,11 +658,12 @@ mtb/
 │   ├── catalog.py       # индекс бэкапов для веба
 │   ├── updater.py       # проверка релизов на GitHub и самообновление
 │   └── notify.py        # уведомления (URL каналов)
+├── tests/               # тесты (pytest)
 ├── packaging/           # точка входа PyInstaller, systemd-юнит
 ├── docs/                # скриншоты
 ├── .gitattributes       # LF для кода и скриптов
 ├── install.sh, mtb.spec, Dockerfile, docker-compose.yml, .env.example
 ├── README.md            # English
 ├── README.ru.md         # русский (основной)
-└── .github/workflows/release.yml
+└── .github/workflows/   # release.yml — релизы, security.yml — проверки
 ```

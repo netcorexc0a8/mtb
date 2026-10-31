@@ -147,7 +147,7 @@ cat <<MSG
 
 Всё лежит в $DIR. Команды работают без настроек путей:
   mtb check                    проверить доступ к устройствам
-  mtb reset-password admin     сбросить пароль администратора
+  mtb reset-password           временный пароль для admin
   journalctl -u mtb -f         логи
 Удаление:  sh install.sh --uninstall   (данные останутся в $DIR)
 MSG

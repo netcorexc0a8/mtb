@@ -103,7 +103,8 @@ class WebApp:
         self.on_settings_changed = on_settings_changed
         self.throttle = auth.Throttle()
         host, _, port = boot.web_listen.rpartition(":")
-        self.address = (host.strip("[]") or "0.0.0.0", int(port or 8080))
+        # адрес задаёт WEB_LISTEN
+        self.address = (host.strip("[]") or "0.0.0.0", int(port or 8080))  # nosec B104
         auth.ensure_admin(db)
 
     def settings(self) -> config.Settings:

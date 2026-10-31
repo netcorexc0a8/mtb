@@ -266,11 +266,13 @@ def save_device(db: Database, box: SecretBox, data: dict, device_id: int | None 
                 c.execute("DELETE FROM device_aliases WHERE name=? AND device_id=?", (dev.name, device_id))
             if device_id is None:
                 cols["created_at"] = now
-                cur = c.execute(f"INSERT INTO devices({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
+                # имена колонок из кода
+                cur = c.execute(f"INSERT INTO devices({','.join(cols)}) VALUES({','.join('?' * len(cols))})",  # nosec B608
                                 tuple(cols.values()))
                 dev.id = cur.lastrowid
             else:
-                c.execute(f"UPDATE devices SET {','.join(f'{k}=?' for k in cols)} WHERE id=?",
+                # имена колонок из кода
+                c.execute(f"UPDATE devices SET {','.join(f'{k}=?' for k in cols)} WHERE id=?",  # nosec B608
                           (*cols.values(), device_id))
                 dev.id = device_id
     except Exception as exc:
@@ -281,7 +283,7 @@ def save_device(db: Database, box: SecretBox, data: dict, device_id: int | None 
 
 
 def load_devices(db: Database, box: SecretBox, only_enabled: bool = False) -> list[Device]:
-    sql = "SELECT * FROM devices" + (" WHERE enabled=1" if only_enabled else "") + " ORDER BY name"
+    sql = "SELECT * FROM devices" + (" WHERE enabled=1" if only_enabled else "") + " ORDER BY name"  # nosec B608
     return [device_from_row(r, box) for r in db.query(sql)]
 
 
