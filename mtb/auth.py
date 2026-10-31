@@ -1,8 +1,9 @@
 """Пользователи, пароли (scrypt), сессии, защита от перебора.
 
 Первый запуск: создаётся пользователь admin без пароля. При первом входе он
-придумывает пароль (с подтверждением). Так же работает сброс пароля из
-консоли: `mtb reset-password admin`.
+придумывает пароль (с подтверждением). Сброс из консоли, `mtb reset-password`,
+выдаёт временный пароль: его вводят при входе и сразу задают свой. Учётную
+запись admin он при необходимости создаёт заново и возвращает ей роль admin.
 """
 from __future__ import annotations
 
@@ -71,14 +72,30 @@ def ensure_admin(db: Database) -> bool:
     return True
 
 
-def reset_password(db: Database, username: str) -> bool:
-    row = db.one("SELECT id FROM users WHERE username=?", (username,))
-    if row is None:
-        return False
+DEFAULT_ADMIN = "admin"
+
+
+def reset_password(db: Database, username: str) -> tuple[str, str] | None:
+    """Временный пароль для входа; старые сессии пользователя завершаются.
+
+    Возвращает (действие, пароль) или None, если пользователя нет. Учётная
+    запись admin восстанавливается: создаётся, если её удалили, и получает
+    роль admin, если её понизили.
+    """
+    temp = secrets.token_urlsafe(12)
+    row = db.one("SELECT id, role FROM users WHERE username=?", (username,))
+    if row is None and username.lower() != DEFAULT_ADMIN:
+        return None
     with db.tx() as c:
-        c.execute("UPDATE users SET password_hash=NULL, must_set_password=1 WHERE id=?", (row["id"],))
+        if row is None:
+            c.execute("INSERT INTO users(username, password_hash, role, must_set_password, created_at) "
+                      "VALUES(?, ?, 'admin', 1, ?)", (DEFAULT_ADMIN, hash_password(temp), time.time()))
+            return "created", temp
+        role = "admin" if username.lower() == DEFAULT_ADMIN else row["role"]
+        c.execute("UPDATE users SET password_hash=?, must_set_password=1, role=? WHERE id=?",
+                  (hash_password(temp), role, row["id"]))
         c.execute("DELETE FROM sessions WHERE user_id=?", (row["id"],))
-    return True
+    return ("promoted" if role != row["role"] else "reset"), temp
 
 
 def set_password(db: Database, user_id: int, password: str, must_change: bool = False) -> None:

@@ -291,7 +291,7 @@ The default language is English. The chosen language is stored in the user profi
 - For new users, an admin issues a temporary password. On first login the user enters it and chooses their own.
 - The "issue a temporary password" button resets a forgotten password and ends that user's sessions.
 - You can change your own password from the user menu; this ends your other sessions.
-- If the only admin's password is lost, run `mtb reset-password admin` on the server. On the next login you will be asked to set a new one.
+- If the admin password is lost, run `mtb reset-password` on the server (in Docker: `docker compose exec mtb mtb reset-password`). It prints a temporary password for `admin`: log in with it and choose your own. If `admin` was deleted or demoted to viewer, the command recreates the account and gives it the admin role back. For another user, pass the username: `mtb reset-password ivan`.
 
 ## Device settings
 
@@ -453,7 +453,7 @@ mtb [--data-dir DIR] [-e ENV_FILE] [--log-level LEVEL] [COMMAND]
   probe [-d NAME ...] [--no-sftp]
                           test which file transport works
   fingerprint HOST[:PORT] fingerprint, expiry and PEM of the API-SSL certificate
-  reset-password [USER]   reset a password (admin by default)
+  reset-password [USER]   issue a temporary password (admin by default)
   update [--check] [-y] [--version vX.Y.Z] [--pre | --stable] [--force]
                           update the binary to a new GitHub release
   -V, --version
@@ -568,7 +568,7 @@ The database schema is migrated automatically on start.
 
 | Symptom | Fix |
 |---|---|
-| Lost the `admin` password | `mtb reset-password admin` on the server. On the next login you will be asked to set a new one. |
+| Lost the `admin` password | `mtb reset-password` on the server (in Docker: `docker compose exec mtb mtb reset-password`). Log in with the printed temporary password and choose your own. |
 | The login form reappears right after logging in | The UI is opened over HTTP while `WEB_COOKIE_SECURE=true`. Use HTTPS or remove the variable. |
 | "Too many attempts" | 10 failed logins in 15 minutes. Wait, or restart the service. |
 | `не удалось расшифровать секрет` in the server log | The database was copied without its `secret.key`. Restore the key or re-enter the passwords. |
