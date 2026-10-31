@@ -318,6 +318,52 @@ def _load_env_file(explicit: str | None) -> None:
         raise SystemExit(f"env-файл не найден: {explicit}")
 
 
+def parse_unit_env(out: str) -> tuple[dict[str, str], str | None]:
+    """Разбор `systemctl show -p Environment -p EnvironmentFiles`: переменные и env-файл."""
+    import shlex
+    env, env_file = {}, None
+    for line in out.splitlines():
+        key, _, value = line.partition("=")
+        if key == "Environment":
+            env.update(item.partition("=")[::2] for item in shlex.split(value))
+        elif key == "EnvironmentFiles" and value:
+            env_file = value.split(" (")[0]
+    return env, env_file
+
+
+def _load_service_env() -> None:
+    """Пути данных из юнита systemd, если их не задали иначе.
+
+    Нужен для установок, где бинарник лежит не в <база>/bin (например, старая
+    раскладка /opt/mtb/mtb + /var/lib/mtb): без этого команда, запущенная из
+    консоли, открыла бы ./data и завела там новую пустую базу.
+    """
+    if os.environ.get("DATA_DIR") or config.install_base() or os.name != "posix":
+        return
+    if not Path("/run/systemd/system").is_dir() or not shutil_which("systemctl"):
+        return
+    import subprocess
+    unit = os.environ.get("MTB_SERVICE", "mtb.service")
+    try:
+        out = subprocess.run(["systemctl", "show", unit, "-p", "Environment", "-p", "EnvironmentFiles"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    env, env_file = parse_unit_env(out)
+    if env_file:
+        from dotenv import load_dotenv
+        try:
+            if Path(env_file).is_file():
+                load_dotenv(env_file, override=False)
+        except OSError:                     # файл доступен только root
+            pass
+    for name in ("DATA_DIR", "BACKUP_DIR"):
+        if name in env:
+            os.environ.setdefault(name, env[name])
+    if os.environ.get("DATA_DIR"):
+        log.debug("Пути данных взяты из %s: %s", unit, os.environ["DATA_DIR"])
+
+
 def _drop_root(boot: config.Bootstrap) -> None:
     """Команда запущена от root — выполнить её от имени владельца данных.
 
@@ -411,7 +457,13 @@ def main() -> None:
     _load_env_file(getattr(args, "env_file", None))
     if cmd == "update":                     # от root: заменить бинарник и перезапустить сервис; базу не трогает
         sys.exit(cmd_update(args))
-    _drop_root(config.load_bootstrap(getattr(args, "data_dir", None)))
+    if not getattr(args, "data_dir", None):
+        _load_service_env()
+    boot = config.load_bootstrap(getattr(args, "data_dir", None))
+    if cmd in ("run", "check", "probe", "reset-password") and not boot.db_path.is_file():
+        raise SystemExit(f"База не найдена: {boot.db_path.resolve()}\n"
+                         "Укажите каталог данных сервиса: mtb --data-dir /путь/к/data " + cmd)
+    _drop_root(boot)
     try:
         ctx = Context(getattr(args, "data_dir", None))
         only = getattr(args, "device", None)

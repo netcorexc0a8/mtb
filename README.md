@@ -569,6 +569,7 @@ The database schema is migrated automatically on start.
 | Symptom | Fix |
 |---|---|
 | Lost the `admin` password | `mtb reset-password` on the server (in Docker: `docker compose exec mtb mtb reset-password`). Log in with the printed temporary password and choose your own. |
+| `База не найдена` (database not found) from CLI commands | The command could not find the service data directory. It is normally taken from the `mtb.service` unit; otherwise pass it: `mtb --data-dir /opt/mtb/data reset-password`. |
 | The login form reappears right after logging in | The UI is opened over HTTP while `WEB_COOKIE_SECURE=true`. Use HTTPS or remove the variable. |
 | "Too many attempts" | 10 failed logins in 15 minutes. Wait, or restart the service. |
 | `не удалось расшифровать секрет` in the server log | The database was copied without its `secret.key`. Restore the key or re-enter the passwords. |
