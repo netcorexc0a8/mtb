@@ -613,7 +613,7 @@ git rm -r --cached -q .; git reset --hard
 
 ```bash
 pip install bandit pip-audit pytest
-bandit -r mtb -ll && pip-audit -r requirements.txt && pytest -q tests
+bandit -r mtb -ll && pip-audit -r requirements.txt && python -m pytest -q tests
 ```
 
 Осознанные исключения bandit помечены в коде `# nosec` с причиной в комментарии рядом.

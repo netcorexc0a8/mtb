@@ -615,7 +615,7 @@ git rm -r --cached -q .; git reset --hard
 
 ```bash
 pip install bandit pip-audit pytest
-bandit -r mtb -ll && pip-audit -r requirements.txt && pytest -q tests
+bandit -r mtb -ll && pip-audit -r requirements.txt && python -m pytest -q tests
 ```
 
 Deliberate bandit exceptions are marked `# nosec` in the code, with the reason in a comment next to it.
